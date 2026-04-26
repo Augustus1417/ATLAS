@@ -1,0 +1,39 @@
+:root {
+  color-scheme: dark;
+  --bg: #101a2a;
+  --panel: #172438;
+  --panel-2: #1d2b42;
+  --line: #2e4668;
+  --text: #ecf4ff;
+  --muted: #9ab2cf;
+  --accent: #8ab8ff;
+  --accent-2: #5fd39a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(circle at top, rgba(138, 184, 255, 0.2), transparent 34%),
+    linear-gradient(180deg, #0f1726 0%, #121d30 100%);
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
