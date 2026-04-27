@@ -19,6 +19,24 @@ function namesLooselyMatch(a, b) {
   return left.includes(right) || right.includes(left);
 }
 
+const SLOT_PRIORITY_BY_KIND = {
+  RAM: ['ram1', 'ram2', 'ram3', 'ram4'],
+  Storage: ['m2_1', 'm2_2', 'sata1'],
+  Fans: ['fan_front1', 'fan_front2', 'fan_top1', 'fan_top2', 'fan_rear1'],
+  CPU: ['cpu_socket'],
+  GPU: ['pcie1'],
+  PSU: ['psu_bay'],
+  Motherboard: ['mobo'],
+  Case: ['case_shell'],
+};
+
+const MOBO_MOUNTED_KINDS = new Set(['Motherboard', 'CPU', 'RAM', 'Storage', 'GPU']);
+
+function isMotherboardSlot(slotKey) {
+  if (!slotKey) return false;
+  return slotKey === 'mobo' || slotKey === 'cpu_socket' || slotKey.startsWith('ram') || slotKey.startsWith('m2') || slotKey === 'pcie1' || slotKey === 'sata1';
+}
+
 export default function useBuilderState() {
   const [budgetPhp, setBudgetPhp] = useState(defaultBudgetPhp);
   const [workload, setWorkload] = useState(workloadPresets[0]);
@@ -29,7 +47,7 @@ export default function useBuilderState() {
 
   const [selectedPart, setSelectedPart] = useState(null);
   const [pendingPart, setPendingPart] = useState(null);
-  const [selectedSlot, setSelectedSlot] = useState('case_shell');
+  const [selectedSlot, setSelectedSlot] = useState(null);
   const [installedParts, setInstalledParts] = useState(initialInstalledParts);
   const [status, setStatus] = useState('Set your budget, then pick a case to begin.');
   const [view, setView] = useState('case');
@@ -63,6 +81,15 @@ export default function useBuilderState() {
       Fans: values.some((part) => part?.kind === 'Fans'),
     };
   }, [installedParts, selectedCase, selectedMotherboard]);
+
+  const installedPartCounts = useMemo(() => {
+    const counts = {};
+    Object.values(installedParts || {}).forEach((part) => {
+      if (!part?.name) return;
+      counts[part.name] = (counts[part.name] || 0) + 1;
+    });
+    return counts;
+  }, [installedParts]);
 
   const activeSectionKey = useMemo(() => {
     for (const stage of stageOrder) {
@@ -240,6 +267,23 @@ export default function useBuilderState() {
     };
   }, [budgetPhp, workload, selectedMotherboard]);
 
+  useEffect(() => {
+    const pendingKind = pendingPart?.kind || pendingPart?.category;
+    const selectedKind = selectedPart?.kind || selectedPart?.category;
+    const activeKind = pendingKind || selectedKind;
+
+    const shouldUseMoboView = Boolean(selectedCase) && (
+      activeSectionKey === 'Motherboard' ||
+      MOBO_MOUNTED_KINDS.has(activeKind) ||
+      isMotherboardSlot(selectedSlot)
+    );
+
+    const targetView = shouldUseMoboView ? 'mobo' : 'case';
+    if (view !== targetView) {
+      setView(targetView);
+    }
+  }, [activeSectionKey, pendingPart, selectedPart, selectedSlot, selectedCase, view]);
+
   function resetDownstreamFromCase(nextCase) {
     setSelectedCase(nextCase);
     setSelectedMotherboard(null);
@@ -257,7 +301,6 @@ export default function useBuilderState() {
       mobo: board,
     }));
     setSelectedSlot('cpu_socket');
-    setView('mobo');
   }
 
   function commitInstall(part, slotKey) {
@@ -275,9 +318,30 @@ export default function useBuilderState() {
     }));
     setPendingPart(null);
     setSelectedSlot(slotKey);
-    setView('case');
     setStatus(`${part.name} installed in the selected slot.`);
     return true;
+  }
+
+  function findFirstCompatibleSlot(part, primarySlot) {
+    const kind = part?.kind || part?.category;
+    const orderedSlots = [
+      primarySlot,
+      ...(SLOT_PRIORITY_BY_KIND[kind] || []),
+      selectedSlot,
+    ].filter(Boolean);
+
+    const uniqueSlots = [...new Set(orderedSlots)];
+
+    for (const slotKey of uniqueSlots) {
+      if (installedParts?.[slotKey]) {
+        continue;
+      }
+      if (canInstallPart(part, slotKey, { selectedCase, selectedMotherboard })) {
+        return slotKey;
+      }
+    }
+
+    return null;
   }
 
   function pickPart(part) {
@@ -297,14 +361,14 @@ export default function useBuilderState() {
 
     setSelectedPart(part);
 
-    const preferredSlot = part.slotHint || selectedSlot;
+    const preferredSlot = findFirstCompatibleSlot(part, part.slotHint || selectedSlot);
     if (preferredSlot && commitInstall(part, preferredSlot)) {
       return;
     }
 
     setPendingPart(part);
     if (preferredSlot) {
-      setSelectedSlot(preferredSlot);
+      setSelectedSlot(preferredSlot || selectedSlot);
       setStatus(`${part.name} selected, but it cannot be installed in the selected slot. Select a compatible slot.`);
     } else {
       setStatus(`${part.name} selected. Choose a compatible slot to install it.`);
@@ -354,6 +418,7 @@ export default function useBuilderState() {
     recommendationSource,
     activeSectionKey,
     completion,
+    installedPartCounts,
     selectedCase,
     selectedMotherboard,
     selectedPart,

@@ -87,8 +87,8 @@ export const mockCatalog = {
     { id: 'cpu-7600', kind: 'CPU', name: 'AMD Ryzen 5 7600', price: 13200, socket: 'AM5', slotHint: 'cpu_socket' },
   ],
   ram: [
-    { id: 'ram-32-ddr5-6000', kind: 'RAM', name: 'Corsair Vengeance 32GB DDR5-6000', price: 6200, ramType: 'DDR5', slotHint: 'ram1' },
-    { id: 'ram-64-ddr5-6000', kind: 'RAM', name: 'G.Skill Trident Z5 64GB DDR5-6000', price: 11500, ramType: 'DDR5', slotHint: 'ram1' },
+    { id: 'ram-32-ddr5-6000', kind: 'RAM', name: 'Corsair Vengeance 32GB DDR5-6000', price: 6200, ramType: 'DDR5' },
+    { id: 'ram-64-ddr5-6000', kind: 'RAM', name: 'G.Skill Trident Z5 64GB DDR5-6000', price: 11500, ramType: 'DDR5' },
   ],
   storage: [
     { id: 'ssd-1tb-gen4', kind: 'Storage', name: 'WD Black SN850X 1TB', price: 4600, interface: 'NVMe', slotHint: 'm2_1' },
@@ -107,9 +107,9 @@ export const mockCatalog = {
     { id: 'psu-sfx-750', kind: 'PSU', name: 'Cooler Master V750 SFX', price: 8400, formFactor: 'SFX', slotHint: 'psu_bay' },
   ],
   fans: [
-    { id: 'fan-120-pwm', kind: 'Fans', name: 'Arctic P12 PWM (120mm)', price: 600, sizeMm: 120, slotHint: 'fan_front1' },
-    { id: 'fan-140-pwm', kind: 'Fans', name: 'Arctic P14 PWM (140mm)', price: 850, sizeMm: 140, slotHint: 'fan_top1' },
-    { id: 'fan-92-pwm', kind: 'Fans', name: 'Noctua NF-A9 PWM (92mm)', price: 1100, sizeMm: 92, slotHint: 'fan_rear1' },
+    { id: 'fan-120-pwm', kind: 'Fans', name: 'Arctic P12 PWM (120mm)', price: 600, sizeMm: 120 },
+    { id: 'fan-140-pwm', kind: 'Fans', name: 'Arctic P14 PWM (140mm)', price: 850, sizeMm: 140 },
+    { id: 'fan-92-pwm', kind: 'Fans', name: 'Noctua NF-A9 PWM (92mm)', price: 1100, sizeMm: 92 },
   ],
 };
 

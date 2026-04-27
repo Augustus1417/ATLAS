@@ -15,7 +15,6 @@ export default function BuilderPage() {
         status={builder.status}
         onSelectSlot={builder.selectSlot}
         view={builder.view}
-        setView={builder.setView}
         selectedCase={builder.selectedCase}
         selectedMotherboard={builder.selectedMotherboard}
         graphicsMode={builder.graphicsMode}

@@ -187,13 +187,30 @@ export default class PcSceneController {
   updateSlotHighlight() {
     this.slotRegistry.values().forEach(({ mesh }) => {
       mesh.material = new THREE.MeshStandardMaterial({
-        color: 0x3d5477,
+        color: 0x2f405a,
         roughness: 0.94,
         metalness: 0.02,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.05,
+        wireframe: true,
       });
     });
+
+    if (this.pendingPart) {
+      this.slotRegistry.values().forEach(({ mesh }) => {
+        if (!this.isSlotCompatibleForPending(this.pendingPart, mesh.userData.slotKey)) return;
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: 0x67c6ff,
+          roughness: 0.86,
+          metalness: 0.08,
+          emissive: 0x1c5774,
+          emissiveIntensity: 0.45,
+          transparent: true,
+          opacity: 0.26,
+          wireframe: true,
+        });
+      });
+    }
 
     const slotKey = this.selectedSlot || this.hoverSlot;
     if (!slotKey) return;
@@ -202,14 +219,29 @@ export default class PcSceneController {
     if (!slot) return;
 
     slot.mesh.material = new THREE.MeshStandardMaterial({
-      color: 0x6ea0ea,
+      color: 0x9ad9ff,
       roughness: 0.82,
       metalness: 0.08,
-      emissive: 0x234a82,
-      emissiveIntensity: 0.58,
+      emissive: 0x2b8bc1,
+      emissiveIntensity: 0.7,
       transparent: true,
       opacity: 0.42,
+      wireframe: true,
     });
+  }
+
+  isSlotCompatibleForPending(part, slotKey) {
+    const kind = part?.kind || part?.category;
+    if (!kind || !slotKey) return false;
+    if (kind === 'Motherboard') return slotKey === 'mobo';
+    if (kind === 'CPU') return slotKey === 'cpu_socket';
+    if (kind === 'RAM') return slotKey.startsWith('ram');
+    if (kind === 'GPU') return slotKey === 'pcie1';
+    if (kind === 'PSU') return slotKey === 'psu_bay';
+    if (kind === 'Fans') return slotKey.startsWith('fan_');
+    if (kind === 'Storage') return slotKey.startsWith('m2') || slotKey === 'sata1';
+    if (kind === 'Case') return slotKey === 'case_shell';
+    return false;
   }
 
   setSelectedSlot(slotKey) {
@@ -219,6 +251,7 @@ export default class PcSceneController {
 
   setPendingPart(part) {
     this.pendingPart = part;
+    this.updateSlotHighlight();
   }
 
   setInstalledParts(installedParts) {
@@ -263,28 +296,17 @@ export default class PcSceneController {
       this.scene.fog.density = 0.018;
       this.scene.background = new THREE.Color(0x131b2d);
     }
-
-    if (this.view === 'rear') {
-      this.renderer.toneMappingExposure = Math.max(this.renderer.toneMappingExposure, 1.4);
-      this.scene.fog.density = Math.min(this.scene.fog.density, 0.014);
-    }
   }
 
   setView(view) {
-    this.view = view;
+    this.view = view === 'mobo' ? 'mobo' : 'case';
     this.applyView();
-    if (this.view === 'rear') {
-      this.partRenderer?.setGraphicsMode('stylized');
-    }
   }
 
   applyView() {
     if (this.view === 'case') {
       this.spherical = { theta: 0.9, phi: 1.36, radius: 12.8 };
       this.target = new THREE.Vector3(0, 0.1, -0.6);
-    } else if (this.view === 'rear') {
-      this.spherical = { theta: -3.05, phi: 1.3, radius: 10.4 };
-      this.target = new THREE.Vector3(-0.35, 0.28, -1.65);
     } else {
       this.spherical = { theta: -0.34, phi: 1.02, radius: 8.6 };
       this.target = new THREE.Vector3(-0.65, 0.35, -1.45);

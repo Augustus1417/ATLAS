@@ -19,7 +19,9 @@ function formatSlotHint(slotHint) {
     sata1: 'SATA bay',
     psu_bay: 'PSU bay',
     fan_front1: 'Front fan mount',
+    fan_front2: 'Front fan mount',
     fan_top1: 'Top fan mount',
+    fan_top2: 'Top fan mount',
     fan_rear1: 'Rear fan mount',
   };
 

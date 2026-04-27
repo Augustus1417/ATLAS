@@ -9,7 +9,6 @@ export default function Viewport({
   status,
   onSelectSlot,
   view,
-  setView,
   selectedCase,
   selectedMotherboard,
   graphicsMode,
@@ -91,18 +90,6 @@ export default function Viewport({
   return (
     <main className="viewport">
       <canvas ref={canvasRef} />
-
-      <div className="view-buttons">
-        <button type="button" className={view === 'mobo' ? 'vbtn active' : 'vbtn'} onClick={() => setView('mobo')}>
-          MOBO VIEW
-        </button>
-        <button type="button" className={view === 'case' ? 'vbtn active' : 'vbtn'} onClick={() => setView('case')}>
-          CASE VIEW
-        </button>
-        <button type="button" className={view === 'rear' ? 'vbtn active' : 'vbtn'} onClick={() => setView('rear')}>
-          REAR VIEW
-        </button>
-      </div>
 
       <div className="graphics-buttons">
         <button
