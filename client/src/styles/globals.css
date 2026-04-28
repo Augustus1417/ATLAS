@@ -1,13 +1,24 @@
 :root {
   color-scheme: dark;
-  --bg: #101a2a;
-  --panel: #172438;
-  --panel-2: #1d2b42;
-  --line: #2e4668;
-  --text: #ecf4ff;
+  --bg: #0a0f1a;
+  --bg-gradient-start: #0a0f1a;
+  --bg-gradient-mid: #121828;
+  --bg-gradient-end: #0f1420;
+  --panel: #151f32;
+  --panel-2: #1a2740;
+  --panel-3: #1f2f4a;
+  --line: #2a3f5f;
+  --line-highlight: #3a5f8f;
+  --text: #e8f0ff;
+  --text-muted: #8a9fbf;
   --muted: #9ab2cf;
-  --accent: #8ab8ff;
+  --accent: #7eb3ff;
+  --accent-glow: rgba(126, 179, 255, 0.3);
   --accent-2: #5fd39a;
+  --accent-2-glow: rgba(95, 211, 154, 0.3);
+  --warning: #ffb86b;
+  --error: #ff6b6b;
+  --success: #4ade80;
 }
 
 * {
@@ -24,11 +35,14 @@ body,
 
 body {
   background:
-    radial-gradient(circle at top, rgba(138, 184, 255, 0.2), transparent 34%),
-    linear-gradient(180deg, #0f1726 0%, #121d30 100%);
+    radial-gradient(ellipse at top, rgba(126, 179, 255, 0.15), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(95, 211, 154, 0.08), transparent 50%),
+    linear-gradient(180deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 50%, var(--bg-gradient-end) 100%);
   color: var(--text);
-  font-family: 'Courier New', monospace;
+  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,

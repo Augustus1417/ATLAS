@@ -187,11 +187,11 @@ export default class PcSceneController {
   updateSlotHighlight() {
     this.slotRegistry.values().forEach(({ mesh }) => {
       mesh.material = new THREE.MeshStandardMaterial({
-        color: 0x2f405a,
+        color: 0x2d3d56,
         roughness: 0.94,
         metalness: 0.02,
         transparent: true,
-        opacity: 0.05,
+        opacity: 0.03,
         wireframe: true,
       });
     });
@@ -200,13 +200,13 @@ export default class PcSceneController {
       this.slotRegistry.values().forEach(({ mesh }) => {
         if (!this.isSlotCompatibleForPending(this.pendingPart, mesh.userData.slotKey)) return;
         mesh.material = new THREE.MeshStandardMaterial({
-          color: 0x67c6ff,
+          color: 0x73d8ff,
           roughness: 0.86,
           metalness: 0.08,
           emissive: 0x1c5774,
           emissiveIntensity: 0.45,
           transparent: true,
-          opacity: 0.26,
+          opacity: 0.34,
           wireframe: true,
         });
       });

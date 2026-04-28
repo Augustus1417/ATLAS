@@ -17,8 +17,6 @@ export default function BuilderPage() {
         view={builder.view}
         selectedCase={builder.selectedCase}
         selectedMotherboard={builder.selectedMotherboard}
-        graphicsMode={builder.graphicsMode}
-        setGraphicsMode={builder.setGraphicsMode}
       />
     </div>
   );

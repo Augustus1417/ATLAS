@@ -100,6 +100,9 @@ export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
           active={category.active}
           selectedPart={selectedPart}
           onPickPart={onPickPart}
+          onIncrementPart={build.incrementPart}
+          onDecrementPart={build.decrementPart}
+          build={build}
         />
       ))}
 
@@ -116,7 +119,7 @@ export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
   );
 }
 
-function CategoryGroup({ category, open, onToggle, completed, active, selectedPart, onPickPart }) {
+function CategoryGroup({ category, open, onToggle, completed, active, selectedPart, onPickPart, onIncrementPart, onDecrementPart, build }) {
   const autoOpen = open;
 
   return (
@@ -132,26 +135,66 @@ function CategoryGroup({ category, open, onToggle, completed, active, selectedPa
       <div className="part-list">
         {autoOpen &&
           !category.locked &&
-          category.parts.map((part) => (
-            <button
-              key={part.id}
-              type="button"
-              className={selectedPart?.id === part.id ? 'part-card active' : 'part-card'}
-              onClick={() => onPickPart(part)}
-            >
-              <div className="part-row">
-                <span className="part-name">{part.name}</span>
-                <span className="part-price">
-                  {part.recommended ? <span className="rec-pill">REC</span> : null}
-                  {formatCurrency(part.price)}
-                </span>
+          category.parts.map((part) => {
+            const installedCount = build.installedPartCounts?.[part.name] || 0;
+            const targetLabel = build.pendingPart?.id === part.id ? formatSlotHint(build.selectedSlot) : '';
+
+            return (
+              <div
+                key={part.id}
+                role="button"
+                tabIndex={0}
+                className={selectedPart?.id === part.id ? 'part-card active' : 'part-card'}
+                onClick={() => onPickPart(part)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onPickPart(part);
+                  }
+                }}
+              >
+                <div className="part-row">
+                  <span className="part-name">{part.name}</span>
+                  <span className="part-price">
+                    {part.recommended ? <span className="rec-pill">REC</span> : null}
+                    {installedCount > 0 ? <span className="count-pill">x{installedCount}</span> : null}
+                    {formatCurrency(part.price)}
+                  </span>
+                </div>
+                <div className="part-row" style={{ marginTop: 6 }}>
+                  <span className="part-name">{part.kind || part.category}</span>
+                  <span className="part-name">{formatSlotHint(part.slotHint)}</span>
+                </div>
+                <div className="qty-controls" role="group" aria-label={`${part.name} quantity controls`}>
+                  <button
+                    type="button"
+                    className="qty-btn"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDecrementPart(part);
+                    }}
+                    disabled={installedCount <= 0}
+                    aria-label={`Remove one ${part.name}`}
+                  >
+                    -
+                  </button>
+                  <span className="qty-value">{installedCount}</span>
+                  <button
+                    type="button"
+                    className="qty-btn"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onIncrementPart(part);
+                    }}
+                    aria-label={`Add one ${part.name}`}
+                  >
+                    +
+                  </button>
+                </div>
+                {targetLabel ? <div className="part-target">Target: {targetLabel}</div> : null}
               </div>
-              <div className="part-row" style={{ marginTop: 6 }}>
-                <span className="part-name">{part.kind || part.category}</span>
-                <span className="part-name">{formatSlotHint(part.slotHint)}</span>
-              </div>
-            </button>
-          ))}
+            );
+          })}
       </div>
     </section>
   );

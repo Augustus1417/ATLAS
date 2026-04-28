@@ -408,6 +408,47 @@ export default function useBuilderState() {
     return true;
   }
 
+  function incrementPart(part) {
+    if (!part) return false;
+    pickPart(part);
+    return true;
+  }
+
+  function decrementPart(part) {
+    if (!part) return false;
+
+    const kind = part.kind || part.category;
+    if (kind === 'Case' || kind === 'Motherboard') {
+      setStatus(`Pick a different ${kind.toLowerCase()} to replace the current one.`);
+      return false;
+    }
+
+    const installedSlots = Object.entries(installedParts || {})
+      .filter(([, installed]) => installed?.name === part.name && (installed?.kind || installed?.category) === kind)
+      .map(([slotKey]) => slotKey);
+
+    if (!installedSlots.length) {
+      setStatus(`${part.name} is not currently installed.`);
+      return false;
+    }
+
+    const priority = SLOT_PRIORITY_BY_KIND[kind] || [];
+    const ordered = [...priority, ...installedSlots].filter((slotKey, index, array) => array.indexOf(slotKey) === index);
+    const targetSlot = [...ordered].reverse().find((slotKey) => installedSlots.includes(slotKey)) || installedSlots[installedSlots.length - 1];
+
+    setInstalledParts((current) => {
+      const next = { ...current };
+      delete next[targetSlot];
+      return next;
+    });
+
+    setPendingPart(null);
+    setSelectedSlot(targetSlot);
+    setSelectedPart(part);
+    setStatus(`${part.name} removed from the build.`);
+    return true;
+  }
+
   return {
     stageOrder,
     sections: sectionsWithStatus,
@@ -433,6 +474,8 @@ export default function useBuilderState() {
     graphicsMode,
     setGraphicsMode,
     pickPart,
+    incrementPart,
+    decrementPart,
     selectSlot,
     installSelected,
   };

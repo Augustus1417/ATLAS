@@ -11,8 +11,6 @@ export default function Viewport({
   view,
   selectedCase,
   selectedMotherboard,
-  graphicsMode,
-  setGraphicsMode,
 }) {
   const canvasRef = useRef(null);
   const controllerRef = useRef(null);
@@ -83,30 +81,9 @@ export default function Viewport({
     controllerRef.current?.setMotherboard(selectedMotherboard || null);
   }, [selectedMotherboard]);
 
-  useEffect(() => {
-    controllerRef.current?.setGraphicsMode(graphicsMode);
-  }, [graphicsMode]);
-
   return (
     <main className="viewport">
       <canvas ref={canvasRef} />
-
-      <div className="graphics-buttons">
-        <button
-          type="button"
-          className={graphicsMode === 'stylized' ? 'vbtn active' : 'vbtn'}
-          onClick={() => setGraphicsMode('stylized')}
-        >
-          STYLIZED
-        </button>
-        <button
-          type="button"
-          className={graphicsMode === 'real' ? 'vbtn active' : 'vbtn'}
-          onClick={() => setGraphicsMode('real')}
-        >
-          REAL MODE
-        </button>
-      </div>
 
       <div className="status-pill">{status}</div>
 
