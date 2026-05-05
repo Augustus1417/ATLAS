@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { atlasApi } from '../../services/atlasApi';
+import { useAuth } from '../../context/AuthContext';
 import BuildSummary from './BuildSummary';
 import { formatCurrency } from './utils/priceMath';
 
@@ -29,11 +31,43 @@ function formatSlotHint(slotHint) {
 }
 
 export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
+  const { token } = useAuth();
   const [openKey, setOpenKey] = useState(build.activeSectionKey);
+  const [loadingRecs, setLoadingRecs] = useState(false);
 
   useEffect(() => {
     setOpenKey(build.activeSectionKey);
   }, [build.activeSectionKey]);
+
+  const handleGetRecommendations = async () => {
+    if (!token) {
+      alert('Please login to get recommendations');
+      return;
+    }
+
+    setLoadingRecs(true);
+    try {
+      const response = await atlasApi.getRecommendations(
+        {
+          budget_php: build.budgetPhp,
+          workload: build.workload,
+          device_type: 'desktop',
+        },
+        token
+      );
+
+      // Load recommended parts into the builder
+      if (response?.parts) {
+        build.setBackendRecommendations(response.parts);
+      }
+
+      alert('Recommendations loaded! Check the parts list.');
+    } catch (error) {
+      alert(`Error getting recommendations: ${error.message}`);
+    } finally {
+      setLoadingRecs(false);
+    }
+  };
 
   return (
     <aside className="sidebar">
@@ -70,6 +104,15 @@ export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
           <option value="general">General</option>
           <option value="student">Student</option>
         </select>
+
+        <button
+          className="recommendations-btn"
+          onClick={handleGetRecommendations}
+          disabled={loadingRecs}
+          style={{ marginTop: 10, width: '100%', padding: '8px', backgroundColor: '#2a5298', color: 'white', border: 'none', borderRadius: '6px', cursor: loadingRecs ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+        >
+          {loadingRecs ? 'Loading...' : 'Get AI Recommendations'}
+        </button>
 
         <div className="planner-meta">
           <span>RECOMMENDER</span>

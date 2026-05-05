@@ -3,10 +3,11 @@ from contextlib import asynccontextmanager
 import psycopg2
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routers import builds, compatibility, components, pricing, recommendations, specs, users
+from routers import builds, chat, compatibility, components, pricing, recommendations, specs, users
 
 
 def ensure_roles_exist() -> None:
@@ -41,6 +42,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_request: Request, exc: HTTPException):
@@ -65,3 +75,4 @@ app.include_router(pricing.router)
 app.include_router(compatibility.router)
 app.include_router(builds.router)
 app.include_router(recommendations.router)
+app.include_router(chat.router)

@@ -1,12 +1,14 @@
 const API_BASE = 'http://localhost:8000';
 
 async function request(path, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   });
 
   const payload = await response.json().catch(() => ({}));
@@ -39,5 +41,11 @@ export const atlasApi = {
       method: 'POST',
       body: JSON.stringify(body),
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }),
+  sendChatMessage: (body, token) =>
+    request('/chat', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { Authorization: `Bearer ${token}` },
     }),
 };

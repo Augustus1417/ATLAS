@@ -633,6 +633,95 @@ Behavior notes:
 
 ---
 
+## Chat
+
+### `POST /chat`
+Send a message to the PC building chatbot.
+
+The chatbot answers any PC building related questions, can recommend parts from the database or web search, and maintains conversation context.
+
+Headers:
+```http
+Authorization: Bearer <access_token>
+```
+
+Request body:
+```json
+{
+  "message": "What CPU would you recommend for a gaming PC with a 15000 PHP budget?",
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "I'm building a gaming PC"
+    },
+    {
+      "role": "assistant",
+      "content": "Great! Gaming builds require a good balance between CPU and GPU. What's your total budget?"
+    }
+  ]
+}
+```
+
+Request notes:
+- `message`: Your current message to the chatbot (required)
+- `conversation_history`: Array of previous messages for context (optional, empty array by default)
+- Each message in history must have `role` (either `"user"` or `"assistant"`) and `content`
+
+Response `200`:
+```json
+{
+  "data": {
+    "message": "For a 15000 PHP gaming budget, I'd recommend starting with a mid-range CPU like an Intel Core i5 13th gen. Pair it with an RTX 4060 GPU for solid 1080p gaming performance...",
+    "recommended_parts": [
+      {
+        "category": "CPU",
+        "name": "Intel Core i5-13600K",
+        "listings": [
+          {
+            "store": "Datablitz",
+            "price": 7500,
+            "link": null
+          },
+          {
+            "store": "PC Hub",
+            "price": 7750,
+            "link": null
+          }
+        ]
+      },
+      {
+        "category": "GPU",
+        "name": "NVIDIA RTX 4060",
+        "listings": [
+          {
+            "store": "TechZone",
+            "price": 6200,
+            "link": null
+          }
+        ]
+      }
+    ],
+    "sources": ["Database", "Serper API (Live Web Search)"]
+  },
+  "message": "Chat response generated successfully"
+}
+```
+
+Response notes:
+- `message`: The conversational response from the chatbot
+- `recommended_parts`: Array of recommended components (null if no recommendations)
+  - Each part includes category, name, and up to 3 listings with store/price info
+- `sources`: Where pricing was found (e.g., "Database", "Serper API (Live Web Search)")
+
+Behavior notes:
+- The chatbot uses AI to understand questions and generate helpful responses
+- When parts are mentioned, it searches the database for pricing and availability
+- If parts aren't found in the database, it attempts to search the web via Serper
+- Conversations are stateless; send full history for context if needed
+- Recommended parts come from AI analysis; if specific parts are mentioned, the bot will look them up
+
+---
+
 ## Common Error Responses
 
 ### Validation error `422`

@@ -478,5 +478,7 @@ export default function useBuilderState() {
     decrementPart,
     selectSlot,
     installSelected,
+    setBackendRecommendations,
+    backendRecommendations,
   };
 }
