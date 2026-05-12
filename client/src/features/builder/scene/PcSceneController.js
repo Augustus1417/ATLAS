@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import BoardScene from './BoardScene';
+import BoardScene from '../../../../prototype_front-end/BoardScene';
 import SlotRegistry from './SlotRegistry';
-import PartRenderer from './PartRenderer';
+import PartRenderer from '../../../../prototype_front-end/PartRenderer';
 
 export default class PcSceneController {
   constructor(canvas, handlers = {}) {

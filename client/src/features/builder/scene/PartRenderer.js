@@ -1,265 +1,373 @@
 import * as THREE from 'three';
 
+/**
+ * PartRenderer — places 3-D part models at their registered slot positions.
+ *
+ * Coordinate convention (same as BoardScene):
+ *   +Z → toward viewer (open/glass side)
+ *   -Z → rear wall
+ *   +X → right / PSU side
+ *   -X → left / mobo side
+ *
+ * The group is added to boardScene.group, so all positions are in that
+ * group's local space.  Each slot's `meta.pos` is the world-local anchor
+ * for the part.  Parts that have a rear-panel element (GPU bracket, PSU
+ * AC socket) use the extra coordinates stored in the slot meta.
+ */
+
 export default class PartRenderer {
   constructor(boardGroup) {
-    this.boardGroup = boardGroup;
-    this.rendered = new Map();
+    this.boardGroup  = boardGroup;
+    this.rendered    = new Map();
     this.graphicsMode = 'stylized';
   }
 
-  setGraphicsMode(mode) {
-    this.graphicsMode = mode || 'stylized';
+  setGraphicsMode(mode) { this.graphicsMode = mode || 'stylized'; }
+
+  _mat(color, roughness = 0.75, metalness = 0.10, extra = {}) {
+    const boost = this.graphicsMode === 'real' ? 0.03 : 0;
+    return new THREE.MeshStandardMaterial({
+      color,
+      roughness: Math.min(1, roughness + boost),
+      metalness: Math.max(0, metalness - boost * 0.5),
+      ...extra,
+    });
   }
 
-  material(config) {
-    const modeBoost = this.graphicsMode === 'real' ? 0.04 : 0;
-    return new THREE.MeshStandardMaterial({
-      ...config,
-      roughness: Math.min(1, (config.roughness ?? 0.7) + modeBoost),
-      metalness: Math.max(0, (config.metalness ?? 0.1) - modeBoost * 0.5),
-    });
+  _box(w, h, d, mat) {
+    return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  }
+  _cyl(rt, rb, h, segs, mat) {
+    return new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, segs), mat);
   }
 
   renderInstalledPart(slotKey, slotRecord, part) {
     this.clear(slotKey);
 
     const group = new THREE.Group();
-    const position = slotRecord?.meta?.pos || slotRecord?.mesh?.position || [0, 0, 0];
-    // Adjust Z offset based on part type for proper depth alignment
-    const zOffset = slotKey === 'pcie1' ? 0.0 : slotKey === 'psu_bay' ? 0.0 : 0.03;
-    group.position.set(position[0], position[1], position[2] + zOffset);
-    const kind = part?.kind || part?.category;
+    const pos   = slotRecord?.meta?.pos || [0, 0, 0];
+    const meta  = slotRecord?.meta || {};
+    const kind  = part?.kind || part?.category || '';
 
+    group.position.set(pos[0], pos[1], pos[2]);
+
+    // ─────────────────────────────────────────────────────────────────────────
     if (slotKey === 'case_shell' || kind === 'Case') {
-      // The case itself is modeled by BoardScene; avoid rendering a second overlay panel.
+      // Case is drawn by BoardScene; nothing to render here.
+
+    // ─────────────────────────────────────────────────────────────────────────
     } else if (slotKey === 'mobo' || kind === 'Motherboard') {
-      const pcb = new THREE.Mesh(new THREE.BoxGeometry(3.65, 3.2, 0.08), this.material({ color: 0x2d5b3a, roughness: 0.82, metalness: 0.04 }));
+      // Motherboard overlay — subtle detail layer on top of the base PCB
+      const pcb = this._box(3.00, 2.38, 0.07, this._mat(0x2d5b3a, 0.80, 0.04));
       group.add(pcb);
 
-      const socket = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.95, 0.09), this.material({ color: 0x3a3f48, roughness: 0.72, metalness: 0.16 }));
-      socket.position.set(-0.75, 0.62, 0.09);
-      group.add(socket);
+      // Chipset heatsink (center-bottom of board)
+      const chip = this._box(0.50, 0.40, 0.14, this._mat(0x1e2530, 0.65, 0.20));
+      chip.position.set(0.40, -0.65, 0.08);
+      group.add(chip);
 
-      const pcie = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 0.1), this.material({ color: 0x222a34, roughness: 0.86, metalness: 0.05 }));
-      pcie.position.set(-0.35, -0.62, 0.08);
-      group.add(pcie);
-
-      [0.72, 0.96].forEach((xOffset) => {
-        const ramRail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.32, 0.1), this.material({ color: 0x2a313d, roughness: 0.82, metalness: 0.08 }));
-        ramRail.position.set(xOffset, 0.18, 0.08);
-        group.add(ramRail);
+      // M.2 heatsink covers
+      [-0.50, -0.72].forEach((dy) => {
+        const m2cover = this._box(1.00, 0.06, 0.08, this._mat(0x2a3444, 0.68, 0.18));
+        m2cover.position.set(0.08, dy, 0.08);
+        group.add(m2cover);
       });
-    } else if (slotKey === 'cpu_socket') {
-      const packageBase = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.08), this.material({ color: 0x3f444b, roughness: 0.65, metalness: 0.14 }));
-      const ihs = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.03), this.material({ color: 0xadb6bf, roughness: 0.5, metalness: 0.2 }));
-      ihs.position.z = 0.055;
-      group.add(packageBase);
+
+      // Power connectors (24-pin ATX on right edge)
+      const atxConn = this._box(0.24, 0.45, 0.12, this._mat(0x1a2030, 0.72, 0.08));
+      atxConn.position.set(1.40, 0.40, 0.08);
+      group.add(atxConn);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (slotKey === 'cpu_socket' || kind === 'CPU') {
+      // CPU package (IHS + substrate)
+      const substrate = this._box(0.86, 0.86, 0.07, this._mat(0x3f444b, 0.65, 0.14));
+      group.add(substrate);
+      const ihs = this._box(0.68, 0.68, 0.028, this._mat(0xadb6bf, 0.46, 0.22));
+      ihs.position.z = 0.048;
       group.add(ihs);
 
-      const coolerBase = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.08), this.material({ color: 0x2a2f37, roughness: 0.74, metalness: 0.12 }));
-      coolerBase.position.z = 0.11;
+      // CPU cooler (tower-style)
+      const coolerBase = this._box(0.60, 0.60, 0.06, this._mat(0x2a2f37, 0.72, 0.14));
+      coolerBase.position.z = 0.08;
       group.add(coolerBase);
 
-      const coolerTower = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.95, 0.48), this.material({ color: 0x495569, roughness: 0.72, metalness: 0.2 }));
-      coolerTower.position.z = 0.36;
-      group.add(coolerTower);
+      // Fin stack
+      const finMat = this._mat(0x8a9ab0, 0.50, 0.28);
+      for (let i = 0; i < 8; i++) {
+        const fin = this._box(0.58, 0.02, 0.46, finMat);
+        fin.position.set(0, -0.14 + i * 0.04, 0.32);
+        group.add(fin);
+      }
 
-      const coolerFan = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 18), this.material({ color: 0x1e242d, roughness: 0.82, metalness: 0.06 }));
-      coolerFan.rotation.y = Math.PI / 2;
-      coolerFan.position.set(0, 0, 0.36);
-      group.add(coolerFan);
+      // Heatpipes (3 visible arcs simplified as cylinders)
+      const hpMat = this._mat(0xc0a840, 0.45, 0.38);
+      [-0.12, 0, 0.12].forEach((dx) => {
+        const hp = this._cyl(0.018, 0.018, 0.50, 8, hpMat);
+        hp.position.set(dx, 0, 0.30);
+        group.add(hp);
+      });
+
+      // Cooler fan (140mm)
+      const fanRing = this._cyl(0.22, 0.22, 0.10, 20, this._mat(0x1e242d, 0.82, 0.06));
+      fanRing.rotation.y = Math.PI / 2;
+      fanRing.position.set(0, 0, 0.33);
+      group.add(fanRing);
+      const fanHub = this._cyl(0.07, 0.07, 0.11, 12, this._mat(0x465264, 0.72, 0.10));
+      fanHub.rotation.y = Math.PI / 2;
+      fanHub.position.set(0, 0, 0.33);
+      group.add(fanHub);
+      const fanMat = this._mat(0x2a3444, 0.80, 0.06);
+      for (let i = 0; i < 7; i++) {
+        const blade = this._box(0.04, 0.14, 0.07, fanMat);
+        const ang   = (i / 7) * Math.PI * 2;
+        blade.position.set(Math.sin(ang) * 0.12, Math.cos(ang) * 0.12, 0.33);
+        blade.rotation.z = ang;
+        group.add(blade);
+      }
+
+    // ─────────────────────────────────────────────────────────────────────────
     } else if (slotKey.startsWith('ram') || kind === 'RAM') {
-      const pcb = new THREE.Mesh(new THREE.BoxGeometry(0.13, 1.3, 0.3), this.material({ color: 0x20262d, roughness: 0.82, metalness: 0.08 }));
-      const spreader = new THREE.Mesh(new THREE.BoxGeometry(0.11, 1.1, 0.28), this.material({ color: 0x5b3f43, roughness: 0.64, metalness: 0.16 }));
+      // RAM stick — oriented vertically (Y axis)
+      const pcb = this._box(0.12, 1.30, 0.28, this._mat(0x20262d, 0.82, 0.08));
       group.add(pcb);
+      const spreader = this._box(0.10, 1.08, 0.26, this._mat(0x5b3f43, 0.60, 0.18));
       group.add(spreader);
-      for (let i = 0; i < 4; i += 1) {
-        const chip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.06), this.material({ color: 0x171b22, roughness: 0.72, metalness: 0.1 }));
-        chip.position.set(0, -0.43 + i * 0.28, 0.15);
+      // DRAM chips
+      for (let i = 0; i < 4; i++) {
+        const chip = this._box(0.07, 0.08, 0.055, this._mat(0x171b22, 0.72, 0.10));
+        chip.position.set(0, -0.38 + i * 0.26, 0.15);
         group.add(chip);
       }
-    } else if (slotKey === 'pcie1' || kind === 'GPU') {
-      // GPU main body/shroud - positioned to sit in the PCIe slot
-      const card = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.85, 0.42), this.material({ color: 0x1e242e, roughness: 0.74, metalness: 0.1 }));
-      card.position.set(0.0, -0.08, 0.35);
-      group.add(card);
+      // Notch
+      const notch = this._box(0.14, 0.04, 0.04, this._mat(0x14181f, 0.90, 0.02));
+      notch.position.set(0, -0.62, 0.0);
+      group.add(notch);
 
-      // GPU PCB - extends from the bracket into the card
-      const pcb = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.7, 0.08), this.material({ color: 0x2a4a3a, roughness: 0.8, metalness: 0.05 }));
-      pcb.position.set(0.1, -0.05, 0.18);
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (slotKey === 'pcie1' || kind === 'GPU') {
+      /**
+       * GPU LAYOUT (in local space, origin = PCIe slot on motherboard):
+       *
+       * The GPU card sits horizontally in the PCIe slot (XZ plane).
+       * - PCB runs along the -Z direction from the slot (toward the rear wall)
+       * - Bracket is at the rear-wall end (at the -Z extreme of the card)
+       * - Fans face +Z (toward the viewer / open side)
+       * - Card body: ~280 mm long (-Z), ~130 mm tall (+Y and -Y from PCB center)
+       */
+      const cardLen = 2.80;   // card length in Z axis
+      const cardH   = 0.52;   // card body height (Y, above PCB center)
+      const cardT   = 0.18;   // card body thickness (X — "how wide the cooler is")
+
+      const pcb = this._box(cardT * 0.5, 0.08, cardLen, this._mat(0x2a4a3a, 0.80, 0.05));
+      pcb.position.set(0, -cardH * 0.15, cardLen * 0.5 - 0.15);
       group.add(pcb);
 
-      // Rear bracket - mounts to the case backpanel (critical for proper alignment)
-      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.92, 0.18), this.material({ color: 0xc4d0df, roughness: 0.5, metalness: 0.3 }));
-      bracket.position.set(-1.42, -0.08, -0.02);
-      group.add(bracket);
-
-      // Bracket cutout for ventilation
-      const bracketCutout = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.12), this.material({ color: 0x1a1f28, roughness: 0.7 }));
-      bracketCutout.position.set(-1.42, -0.08, -0.02);
-      group.add(bracketCutout);
-
-      // Dual fan assembly
-      const fanOne = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 24), this.material({ color: 0x1a1f28, roughness: 0.85, metalness: 0.05 }));
-      fanOne.rotation.x = Math.PI / 2;
-      fanOne.position.set(-0.55, -0.08, 0.52);
-      group.add(fanOne);
-
-      // Fan blades for first fan
-      for (let i = 0; i < 9; i++) {
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.15, 0.08), this.material({ color: 0x2a3545 }));
-        blade.position.set(-0.55, -0.08 + Math.cos((i / 9) * Math.PI * 2) * 0.12, 0.52 + Math.sin((i / 9) * Math.PI * 2) * 0.12);
-        blade.rotation.z = (i / 9) * Math.PI * 2;
-        group.add(blade);
-      }
-
-      const fanTwo = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 24), this.material({ color: 0x1a1f28, roughness: 0.85, metalness: 0.05 }));
-      fanTwo.rotation.x = Math.PI / 2;
-      fanTwo.position.set(0.55, -0.08, 0.52);
-      group.add(fanTwo);
-
-      // Fan blades for second fan
-      for (let i = 0; i < 9; i++) {
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.15, 0.08), this.material({ color: 0x2a3545 }));
-        blade.position.set(0.55, -0.08 + Math.cos((i / 9) * Math.PI * 2) * 0.12, 0.52 + Math.sin((i / 9) * Math.PI * 2) * 0.12);
-        blade.rotation.z = (i / 9) * Math.PI * 2;
-        group.add(blade);
-      }
-
-      // Center hub for fans
-      const hubOne = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 12), this.material({ color: 0x3a4555, roughness: 0.7, metalness: 0.15 }));
-      hubOne.rotation.x = Math.PI / 2;
-      hubOne.position.set(-0.55, -0.08, 0.52);
-      group.add(hubOne);
-
-      const hubTwo = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 12), this.material({ color: 0x3a4555, roughness: 0.7, metalness: 0.15 }));
-      hubTwo.rotation.x = Math.PI / 2;
-      hubTwo.position.set(0.55, -0.08, 0.52);
-      group.add(hubTwo);
-
-      // Top shroud/cover with angular design
-      const shroud = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.15, 0.35), this.material({ color: 0x2a3545, roughness: 0.6, metalness: 0.2 }));
-      shroud.position.set(0.0, 0.38, 0.35);
+      const shroud = this._box(cardT + 0.06, cardH + 0.18, cardLen - 0.05,
+        this._mat(0x1e242e, 0.72, 0.10));
+      shroud.position.set(0, cardH * 0.30, cardLen * 0.5 - 0.20);
       group.add(shroud);
 
-      // RGB light strip along the edge
-      const rgbStrip = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.04, 0.02), this.material({ color: 0x4a9eff, roughness: 0.3, metalness: 0.4, emissive: 0x2a5f9f, emissiveIntensity: 0.3 }));
-      rgbStrip.position.set(0.0, 0.32, 0.52);
+      const fanR    = 0.46;
+      const fanPositionsZ = [cardLen * 0.22, cardLen * 0.65];
+      fanPositionsZ.forEach((fz) => {
+        const frame = this._box(cardT + 0.04, fanR * 2.2, fanR * 2.2,
+          this._mat(0x1a2030, 0.82, 0.06));
+        frame.position.set(0, -(cardH * 0.25 + fanR), fz);
+        group.add(frame);
+
+        const ring = this._cyl(fanR, fanR, 0.08, 24, this._mat(0x202936, 0.78, 0.08));
+        ring.rotation.z = Math.PI / 2;
+        ring.position.set(0, -(cardH * 0.25 + fanR), fz);
+        group.add(ring);
+
+        const hub = this._cyl(0.10, 0.10, 0.09, 12, this._mat(0x465264, 0.72, 0.10));
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(0, -(cardH * 0.25 + fanR), fz);
+        group.add(hub);
+
+        const bladeMat = this._mat(0x2a3545, 0.80, 0.06);
+        for (let i = 0; i < 7; i++) {
+          const ang   = (i / 7) * Math.PI * 2;
+          const blade = this._box(0.09, 0.14, 0.055, bladeMat);
+          blade.position.set(
+            Math.cos(ang) * 0.24 * (cardT + 0.04),
+            -(cardH * 0.25 + fanR) + Math.sin(ang) * 0.28,
+            fz,
+          );
+          blade.rotation.x = ang;
+          group.add(blade);
+        }
+      });
+
+      const rgbStrip = this._box(cardT + 0.08, 0.04, cardLen * 0.90,
+        this._mat(0x4a9eff, 0.30, 0.40, { emissive: 0x1a4a8f, emissiveIntensity: 0.45 }));
+      rgbStrip.position.set(0, cardH * 0.48, cardLen * 0.48);
       group.add(rgbStrip);
 
-      // Power connector at the end
-      const powerConnector = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.1), this.material({ color: 0x1a1f28, roughness: 0.8 }));
-      powerConnector.position.set(1.25, -0.08, 0.35);
-      group.add(powerConnector);
-    } else if (slotKey.startsWith('m2') || (kind === 'Storage' && part?.interface === 'NVMe')) {
-      const stick = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.07, 0.1), this.material({ color: 0x26303c, roughness: 0.8, metalness: 0.08 }));
-      stick.position.x = -0.12;
-      group.add(stick);
-      for (let i = 0; i < 4; i += 1) {
-        const nand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.07), this.material({ color: 0x191d24, roughness: 0.72, metalness: 0.08 }));
-        nand.position.set(-0.5 + i * 0.34, 0, 0.05);
-        group.add(nand);
-      }
-    } else if (slotKey === 'sata1' || (kind === 'Storage' && part?.interface === 'SATA')) {
-      const drive = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.62, 0.13), this.material({ color: 0x515a67, roughness: 0.82, metalness: 0.08 }));
-      group.add(drive);
+      const bracketH   = (meta.gpuSlotH || 0.20) * 0.95;
+      const bracketMat = this._mat(0xc4d0df, 0.50, 0.30);
+      const bracket    = this._box(0.06, bracketH, 0.16, bracketMat);
+      bracket.position.set(0, cardH * 0.15, -0.05);
+      group.add(bracket);
 
-      const label = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.01), this.material({ color: 0xd7dde8, roughness: 0.92, metalness: 0.01 }));
-      label.position.z = 0.07;
+      for (let i = 0; i < 5; i++) {
+        const vh = this._cyl(0.028, 0.028, 0.10, 8, this._mat(0x1a1f28, 0.80, 0.05));
+        vh.rotation.x = Math.PI / 2;
+        vh.position.set(0, bracketH * 0.28 - i * bracketH * 0.14, -0.02);
+        group.add(vh);
+      }
+
+      const pwrConn = this._box(0.22, 0.10, 0.14, this._mat(0x1a1f28, 0.80, 0.05));
+      pwrConn.position.set(0, cardH * 0.42, cardLen * 0.85);
+      group.add(pwrConn);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (slotKey.startsWith('m2') || (kind === 'Storage' && part?.interface === 'NVMe')) {
+      const stick = this._box(1.05, 0.06, 0.10, this._mat(0x26303c, 0.80, 0.08));
+      stick.position.x = -0.08;
+      group.add(stick);
+      for (let i = 0; i < 4; i++) {
+        const chip = this._box(0.11, 0.035, 0.07, this._mat(0x191d24, 0.72, 0.08));
+        chip.position.set(-0.42 + i * 0.28, 0, 0.042);
+        group.add(chip);
+      }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (slotKey === 'sata1' || (kind === 'Storage' && part?.interface === 'SATA')) {
+      const drive = this._box(0.86, 0.58, 0.12, this._mat(0x515a67, 0.82, 0.08));
+      group.add(drive);
+      const label = this._box(0.58, 0.36, 0.008, this._mat(0xd7dde8, 0.92, 0.01));
+      label.position.z = 0.065;
       group.add(label);
+      const conn = this._box(0.14, 0.08, 0.04, this._mat(0x101520, 0.78, 0.06));
+      conn.position.set(0.32, -0.24, 0.0);
+      group.add(conn);
+
+    // ─────────────────────────────────────────────────────────────────────────
     } else if (slotKey === 'psu_bay' || kind === 'PSU') {
-      // Main PSU housing
-      const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.85, 1.4), this.material({ color: 0x1a1f28, roughness: 0.7, metalness: 0.15 }));
-      body.position.set(0, 0, -0.1);
+      const bW  = meta.psuBodyW  || 1.50;
+      const bH  = meta.psuBodyH  || 0.86;
+      const bD  = 1.40;
+      const rZlocal = (meta.psuRearZ || 0) - pos[2];
+
+      const body = this._box(bW, bH, bD, this._mat(0x1a1f28, 0.70, 0.16));
       group.add(body);
 
-      // Front fan grill with hex pattern
-      const grillPlate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.75, 0.04), this.material({ color: 0x2a313d, roughness: 0.6, metalness: 0.2 }));
-      grillPlate.position.set(0, 0, 0.68);
-      group.add(grillPlate);
+      const labelMat = this._mat(0xd4dce8, 0.60, 0.08);
+      const label = this._box(bW * 0.80, 0.008, bD * 0.70, labelMat);
+      label.position.set(0, bH * 0.502, 0);
+      group.add(label);
 
-      // Hex hole pattern for grill
-      const hexHoleMaterial = new THREE.MeshStandardMaterial({ color: 0x0a0f18, roughness: 0.9 });
-      for (let row = 0; row < 5; row++) {
-        for (let col = 0; col < 4; col++) {
-          const offsetX = (col - 1.5) * 0.28;
-          const offsetY = (row - 2) * 0.18;
-          const hexHole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 6), hexHoleMaterial);
-          hexHole.rotation.x = Math.PI / 2;
-          hexHole.position.set(offsetX, offsetY, 0.7);
-          group.add(hexHole);
-        }
-      }
+      const fanSize = bW * 0.78;
+      const fanFrame = this._box(fanSize, 0.04, fanSize, this._mat(0x2a313d, 0.65, 0.18));
+      fanFrame.position.set(0, -bH * 0.51, 0);
+      group.add(fanFrame);
 
-      // Center fan hub visible through grill
-      const fanHub = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.02, 24), this.material({ color: 0x1a1f28, roughness: 0.8 }));
-      fanHub.rotation.x = Math.PI / 2;
-      fanHub.position.set(0, 0, 0.69);
+      const fanRing = this._cyl(fanSize * 0.42, fanSize * 0.42, 0.045, 24, this._mat(0x1e2430, 0.78, 0.08));
+      fanRing.position.set(0, -bH * 0.515, 0);
+      group.add(fanRing);
+
+      const fanHub = this._cyl(0.10, 0.10, 0.048, 12, this._mat(0x465264, 0.72, 0.10));
+      fanHub.position.set(0, -bH * 0.515, 0);
       group.add(fanHub);
 
-      // Fan blades inside
+      const bladeMat = this._mat(0x2a3545, 0.80, 0.06);
       for (let i = 0; i < 9; i++) {
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.12, 0.06), this.material({ color: 0x2a3545 }));
-        blade.position.set(0, Math.cos((i / 9) * Math.PI * 2) * 0.1, 0.65 + Math.sin((i / 9) * Math.PI * 2) * 0.1);
-        blade.rotation.z = (i / 9) * Math.PI * 2;
+        const ang   = (i / 9) * Math.PI * 2;
+        const blade = this._box(0.018, 0.050, 0.10, bladeMat);
+        blade.position.set(
+          Math.cos(ang) * fanSize * 0.24,
+          -bH * 0.512,
+          Math.sin(ang) * fanSize * 0.24,
+        );
+        blade.rotation.y = ang;
         group.add(blade);
       }
 
-      // Rear connector panel
-      const connectorPanel = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.04), this.material({ color: 0x2a313d, roughness: 0.5, metalness: 0.25 }));
-      connectorPanel.position.set(-0.65, 0.2, 0.1);
-      group.add(connectorPanel);
-
-      // Power switch
-      const powerSwitch = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.03), this.material({ color: 0x1a1f28, roughness: 0.7 }));
-      powerSwitch.position.set(-0.55, 0.25, 0.13);
-      group.add(powerSwitch);
-
-      // AC power socket
-      const acSocket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.15, 0.02), this.material({ color: 0x0a0f18, roughness: 0.9 }));
-      acSocket.position.set(-0.65, 0.1, 0.13);
-      group.add(acSocket);
-
-      // Modular cable ports (for semi-modular PSUs)
-      const modularPorts = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.2, 0.03), this.material({ color: 0x1a1f28, roughness: 0.8 }));
-      modularPorts.position.set(-0.45, -0.1, 0.13);
-      group.add(modularPorts);
-
-      // PSU label/specs sticker
-      const label = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 0.01), this.material({ color: 0xd4dce8, roughness: 0.6, metalness: 0.1 }));
-      label.position.set(0, 0, -0.71);
-      group.add(label);
-
-      // Ventilation slots on sides
-      const ventSlotMaterial = new THREE.MeshStandardMaterial({ color: 0x0a0f18, roughness: 0.95 });
-      for (let i = 0; i < 8; i++) {
-        const ventLeft = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.5, 0.08), ventSlotMaterial);
-        ventLeft.position.set(-0.76, -0.2 + (i * 0.12), 0);
-        group.add(ventLeft);
-
-        const ventRight = ventLeft.clone();
-        ventRight.position.set(0.76, -0.2 + (i * 0.12), 0);
-        group.add(ventRight);
+      const ventMat = this._mat(0x0a0f18, 0.95, 0.01);
+      for (let i = 0; i < 7; i++) {
+        const vl = this._box(0.018, bH * 0.55, 0.06, ventMat);
+        vl.position.set(-bW * 0.52, 0, -bD * 0.28 + i * 0.14);
+        group.add(vl);
+        const vr = vl.clone();
+        vr.position.x = bW * 0.52;
+        group.add(vr);
       }
+
+      const modPanel = this._box(bW * 0.88, bH * 0.60, 0.035, this._mat(0x2a313d, 0.60, 0.20));
+      modPanel.position.set(0, -bH * 0.10, bD * 0.51);
+      group.add(modPanel);
+      for (let i = 0; i < 5; i++) {
+        const port = this._box(0.14, 0.08, 0.025, this._mat(0x0a0e18, 0.90, 0.05));
+        port.position.set(-bW * 0.32 + i * 0.15, -bH * 0.10, bD * 0.53);
+        group.add(port);
+      }
+
+      const acSock = this._box(0.14, 0.12, 0.030, this._mat(0x080c14, 0.90, 0.05));
+      acSock.position.set(bW * 0.25, 0, rZlocal - 0.015);
+      group.add(acSock);
+
+      const pwrSw = this._box(0.10, 0.09, 0.030, this._mat(0x1a1f28, 0.72, 0.10));
+      pwrSw.position.set(-bW * 0.25, 0, rZlocal - 0.015);
+      group.add(pwrSw);
+
+    // ─────────────────────────────────────────────────────────────────────────
     } else if (slotKey.startsWith('fan_') || kind === 'Fans') {
-      const fanSize = slotKey.includes('rear') ? 0.9 : 1.08;
-      const housing = new THREE.Mesh(new THREE.BoxGeometry(fanSize, fanSize, 0.1), this.material({ color: 0x2a3444, roughness: 0.84, metalness: 0.06 }));
-      if (slotKey.startsWith('fan_top')) {
-        housing.rotation.x = Math.PI / 2;
-      }
+      const isTop  = meta.isTop  || slotKey.includes('top');
+      const isRear = meta.isRear || slotKey.includes('rear');
+      const fanR   = slotKey.includes('rear') ? 0.54 : 0.55;
+
+      const hSize = fanR * 2.30;
+      const housing = this._box(hSize, hSize, 0.09, this._mat(0x2a3444, 0.84, 0.06));
+      if (isTop)  housing.rotation.x = Math.PI / 2;
       group.add(housing);
 
-      const ring = new THREE.Mesh(new THREE.CylinderGeometry(fanSize * 0.36, fanSize * 0.36, 0.09, 24), this.material({ color: 0x202936, roughness: 0.78, metalness: 0.08 }));
-      if (slotKey.startsWith('fan_front') || slotKey.startsWith('fan_rear')) {
-        ring.rotation.x = Math.PI / 2;
-      }
-      group.add(ring);
+      const sMat = this._mat(0x8899aa, 0.55, 0.35);
+      [[-0.46, -0.46], [0.46, -0.46], [-0.46, 0.46], [0.46, 0.46]].forEach(([dx, dy]) => {
+        const sc = this._cyl(0.035, 0.035, 0.11, 8, sMat);
+        if (isTop)       sc.rotation.x = Math.PI / 2;
+        else if (isRear) sc.rotation.x = Math.PI / 2;
+        sc.position.set(dx * hSize * 0.44, dy * hSize * 0.44, 0);
+        if (isTop) sc.position.set(dx * hSize * 0.44, 0, dy * hSize * 0.44);
+        group.add(sc);
+      });
 
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.11, 12), this.material({ color: 0x465264, roughness: 0.72, metalness: 0.1 }));
-      if (slotKey.startsWith('fan_front') || slotKey.startsWith('fan_rear')) {
-        hub.rotation.x = Math.PI / 2;
-      }
+      const ringMat  = this._mat(0x202936, 0.78, 0.08);
+      const hubMat   = this._mat(0x465264, 0.72, 0.10);
+      const bladeMat = this._mat(0x2a3545, 0.80, 0.06);
+
+      const makeAxial = (mesh) => {
+        if (isTop)  mesh.rotation.x = Math.PI / 2;
+        if (isRear) mesh.rotation.x = Math.PI / 2;
+        return mesh;
+      };
+
+      const ring = makeAxial(this._cyl(fanR, fanR, 0.088, 24, ringMat));
+      group.add(ring);
+      const hub  = makeAxial(this._cyl(0.11, 0.11, 0.10, 12, hubMat));
       group.add(hub);
+
+      for (let i = 0; i < 7; i++) {
+        const ang   = (i / 7) * Math.PI * 2;
+        const blade = this._box(0.035, 0.15, 0.062, bladeMat);
+        if (isTop || isRear) {
+          blade.position.set(Math.cos(ang) * fanR * 0.54, Math.sin(ang) * fanR * 0.54, 0);
+          blade.rotation.z = ang + Math.PI * 0.15;
+          if (isTop) {
+            blade.position.set(Math.cos(ang) * fanR * 0.54, 0, Math.sin(ang) * fanR * 0.54);
+            blade.rotation.y = ang + Math.PI * 0.15;
+          }
+        } else {
+          blade.position.set(Math.cos(ang) * fanR * 0.54, Math.sin(ang) * fanR * 0.54, 0);
+          blade.rotation.z = ang + Math.PI * 0.15;
+        }
+        group.add(blade);
+      }
+
+      const rgbRing = makeAxial(this._cyl(fanR * 0.86, fanR * 0.86, 0.015, 24,
+        this._mat(0x3a7aff, 0.30, 0.20, { emissive: 0x1a3a8f, emissiveIntensity: 0.35 })));
+      group.add(rgbRing);
     }
 
     if (!group.children.length) return null;
@@ -277,6 +385,6 @@ export default class PartRenderer {
   }
 
   clearAll() {
-    [...this.rendered.keys()].forEach((slotKey) => this.clear(slotKey));
+    [...this.rendered.keys()].forEach((k) => this.clear(k));
   }
 }

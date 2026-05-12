@@ -9,12 +9,22 @@ export default class BoardScene {
     this.motherboard = null;
   }
 
-  setCasePreset(casePreset) {
-    this.casePreset = casePreset;
-  }
+  setCasePreset(preset) { this.casePreset = preset; }
+  setMotherboard(mb)    { this.motherboard = mb; }
 
-  setMotherboard(motherboard) {
-    this.motherboard = motherboard;
+  _mat(color, roughness = 0.85, metalness = 0.08, extra = {}) {
+    return new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
+  }
+  _box(w, h, d, mat) {
+    return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat || new THREE.MeshStandardMaterial());
+  }
+  _cyl(rt, rb, h, segs, mat) {
+    return new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, segs), mat || new THREE.MeshStandardMaterial());
+  }
+  _add(mesh, x, y, z) {
+    mesh.position.set(x, y, z);
+    this.group.add(mesh);
+    return mesh;
   }
 
   build() {
@@ -22,22 +32,42 @@ export default class BoardScene {
     this.group = new THREE.Group();
     this.slotRegistry.clear();
 
-    const scaleByPreset = {
-      'atx-mid': { x: 1.0, y: 1.0, z: 1.0 },
-      'matx-compact': { x: 0.88, y: 0.9, z: 0.9 },
-      'itx-sff': { x: 0.75, y: 0.78, z: 0.78 },
+    const scales = {
+      'atx-mid':      { x: 1.00, y: 1.00, z: 1.00 },
+      'matx-compact': { x: 0.90, y: 0.90, z: 0.90 },
+      'itx-sff':      { x: 0.78, y: 0.78, z: 0.78 },
     };
+    const s = scales[this.casePreset] || scales['atx-mid'];
 
-    const scale = scaleByPreset[this.casePreset] || scaleByPreset['atx-mid'];
+    // ── Outer dimensions ──────────────────────────────────────────────────────
+    const W  = 2.10 * s.x;
+    const H  = 4.65 * s.y;
+    const D  = 4.35 * s.z;
+    const hW = W * 0.5;
+    const hH = H * 0.5;
+    const hD = D * 0.5;
+    const T  = 0.06;   // wall thickness
 
-    const width = 5.6 * scale.x;
-    const height = 7.4 * scale.y;
-    const depth = 3.6 * scale.z;
-    const halfW = width * 0.5;
-    const halfH = height * 0.5;
-    const halfD = depth * 0.5;
-    const frameThickness = 0.14;
-    const rearPanelZ = -halfD + 0.12;
+    // ── Materials ─────────────────────────────────────────────────────────────
+    const mShell   = this._mat(0x1c2333, 0.90, 0.06);
+    const mFront   = this._mat(0x222c3c, 0.88, 0.05);
+    const mRear    = this._mat(0x1a2130, 0.85, 0.08);
+    const mInner   = this._mat(0x1e2840, 0.90, 0.04);
+    const mHole    = this._mat(0x080c14, 0.95, 0.01);
+    const mScrew   = this._mat(0x8899aa, 0.55, 0.35);
+    const mAccent  = this._mat(0x2e3f58, 0.70, 0.12);
+    const mMesh    = this._mat(0x101820, 0.92, 0.02);
+    const mBracket = this._mat(0x9aafc2, 0.60, 0.22);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1. SHELL WALLS (right/glass panel omitted to show interior)
+    // ─────────────────────────────────────────────────────────────────────────
+    this._add(this._box(W, H, T,   mRear),  0,        0,        -hD + T * 0.5);  // rear
+    this._add(this._box(T, H, D,   mShell), -hW + T * 0.5, 0,   0);             // left (solid)
+    this._add(this._box(W, T, D,   mShell), 0,  hH - T * 0.5,   0);             // top
+    this._add(this._box(W, T, D,   mShell), 0, -hH + T * 0.5,   0);             // bottom
+    this._add(this._box(W, H, T,   mFront), 0,        0,        hD - T * 0.5);  // front
+
 
     const shellMaterial = new THREE.MeshStandardMaterial({
       color: 0x20293a,
