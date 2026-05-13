@@ -39,6 +39,17 @@ export default class BoardScene {
     };
     const s = scales[this.casePreset] || scales['atx-mid'];
 
+    // (legacy aliases will be set after computed dimensions)
+
+    // ── Outer dimensions ──────────────────────────────────────────────────────
+    const W  = 2.10 * s.x;
+    const H  = 4.65 * s.y;
+    const D  = 4.35 * s.z;
+    const hW = W * 0.5;
+    const hH = H * 0.5;
+    const hD = D * 0.5;
+    const T  = 0.06;   // wall thickness
+
     // Backwards-compatible aliases used by older code paths
     const width = W;
     const height = H;
@@ -49,15 +60,6 @@ export default class BoardScene {
     const scale = { x: s.x, y: s.y, z: s.z };
     const frameThickness = T;
     const rearPanelZ = -halfD + 0.12;
-
-    // ── Outer dimensions ──────────────────────────────────────────────────────
-    const W  = 2.10 * s.x;
-    const H  = 4.65 * s.y;
-    const D  = 4.35 * s.z;
-    const hW = W * 0.5;
-    const hH = H * 0.5;
-    const hD = D * 0.5;
-    const T  = 0.06;   // wall thickness
 
     // ── Materials ─────────────────────────────────────────────────────────────
     const mShell   = this._mat(0x1c2333, 0.90, 0.06);
