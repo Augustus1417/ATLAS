@@ -39,6 +39,17 @@ export default class BoardScene {
     };
     const s = scales[this.casePreset] || scales['atx-mid'];
 
+    // Backwards-compatible aliases used by older code paths
+    const width = W;
+    const height = H;
+    const depth = D;
+    const halfW = hW;
+    const halfH = hH;
+    const halfD = hD;
+    const scale = { x: s.x, y: s.y, z: s.z };
+    const frameThickness = T;
+    const rearPanelZ = -halfD + 0.12;
+
     // ── Outer dimensions ──────────────────────────────────────────────────────
     const W  = 2.10 * s.x;
     const H  = 4.65 * s.y;
