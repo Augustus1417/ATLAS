@@ -77,6 +77,12 @@ export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
         </div>
       </div>
 
+      <div className="sidebar-actions">
+        <a href="/parts" className="sidebar-link sidebar-link-strong sidebar-link-block">
+          View Parts
+        </a>
+      </div>
+
       <div className="stepper" aria-label="Build progression">
         {build.stageOrder.map((stage) => {
           const section = sections.find((item) => item.key === stage);
