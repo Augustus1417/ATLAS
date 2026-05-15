@@ -161,7 +161,7 @@ def generate_recommendation(conn, budget_php: int, workload: str, device_type: s
                 listings = fetch_live_prices(part["name"])
                 save_pricing_history(conn, component_id, listings)
             except SerperServiceError as exc:
-                raise RecommendationServiceError(str(exc)) from exc
+                listings = []
 
         if not listings:
             listings = [{"store": "Price unavailable", "price": None, "link": None, "status": "Price unavailable"}]

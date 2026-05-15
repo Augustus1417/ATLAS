@@ -5,82 +5,43 @@ export default class BoardScene {
     this.scene = scene;
     this.slotRegistry = slotRegistry;
     this.group = new THREE.Group();
+    this.motherboardGroup = new THREE.Group();
+    this.group.add(this.motherboardGroup);
     this.casePreset = 'atx-mid';
     this.motherboard = null;
   }
 
-  setCasePreset(preset) { this.casePreset = preset; }
-  setMotherboard(mb)    { this.motherboard = mb; }
+  setCasePreset(casePreset) {
+    this.casePreset = casePreset;
+  }
 
-  _mat(color, roughness = 0.85, metalness = 0.08, extra = {}) {
-    return new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
-  }
-  _box(w, h, d, mat) {
-    return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat || new THREE.MeshStandardMaterial());
-  }
-  _cyl(rt, rb, h, segs, mat) {
-    return new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, segs), mat || new THREE.MeshStandardMaterial());
-  }
-  _add(mesh, x, y, z) {
-    mesh.position.set(x, y, z);
-    this.group.add(mesh);
-    return mesh;
+  setMotherboard(motherboard) {
+    this.motherboard = motherboard;
   }
 
   build() {
     this.scene.remove(this.group);
     this.group = new THREE.Group();
+    this.motherboardGroup = new THREE.Group();
+    this.group.add(this.motherboardGroup);
     this.slotRegistry.clear();
 
-    const scales = {
-      'atx-mid':      { x: 1.00, y: 1.00, z: 1.00 },
-      'matx-compact': { x: 0.90, y: 0.90, z: 0.90 },
-      'itx-sff':      { x: 0.78, y: 0.78, z: 0.78 },
+    const scaleByPreset = {
+      'atx-mid': { x: 1.0, y: 1.0, z: 1.0 },
+      'matx-compact': { x: 0.88, y: 0.9, z: 0.9 },
+      'itx-sff': { x: 0.75, y: 0.78, z: 0.78 },
     };
-    const s = scales[this.casePreset] || scales['atx-mid'];
 
-    // (legacy aliases will be set after computed dimensions)
+    const scale = scaleByPreset[this.casePreset] || scaleByPreset['atx-mid'];
 
-    // ── Outer dimensions ──────────────────────────────────────────────────────
-    const W  = 2.10 * s.x;
-    const H  = 4.65 * s.y;
-    const D  = 4.35 * s.z;
-    const hW = W * 0.5;
-    const hH = H * 0.5;
-    const hD = D * 0.5;
-    const T  = 0.06;   // wall thickness
-
-    // Backwards-compatible aliases used by older code paths
-    const width = W;
-    const height = H;
-    const depth = D;
-    const halfW = hW;
-    const halfH = hH;
-    const halfD = hD;
-    const scale = { x: s.x, y: s.y, z: s.z };
-    const frameThickness = T;
+    const width = 5.6 * scale.x;
+    const height = 7.4 * scale.y;
+    const depth = 3.6 * scale.z;
+    const halfW = width * 0.5;
+    const halfH = height * 0.5;
+    const halfD = depth * 0.5;
+    const frameThickness = 0.14;
     const rearPanelZ = -halfD + 0.12;
-
-    // ── Materials ─────────────────────────────────────────────────────────────
-    const mShell   = this._mat(0x1c2333, 0.90, 0.06);
-    const mFront   = this._mat(0x222c3c, 0.88, 0.05);
-    const mRear    = this._mat(0x1a2130, 0.85, 0.08);
-    const mInner   = this._mat(0x1e2840, 0.90, 0.04);
-    const mHole    = this._mat(0x080c14, 0.95, 0.01);
-    const mScrew   = this._mat(0x8899aa, 0.55, 0.35);
-    const mAccent  = this._mat(0x2e3f58, 0.70, 0.12);
-    const mMesh    = this._mat(0x101820, 0.92, 0.02);
-    const mBracket = this._mat(0x9aafc2, 0.60, 0.22);
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // 1. SHELL WALLS (right/glass panel omitted to show interior)
-    // ─────────────────────────────────────────────────────────────────────────
-    this._add(this._box(W, H, T,   mRear),  0,        0,        -hD + T * 0.5);  // rear
-    this._add(this._box(T, H, D,   mShell), -hW + T * 0.5, 0,   0);             // left (solid)
-    this._add(this._box(W, T, D,   mShell), 0,  hH - T * 0.5,   0);             // top
-    this._add(this._box(W, T, D,   mShell), 0, -hH + T * 0.5,   0);             // bottom
-    this._add(this._box(W, H, T,   mFront), 0,        0,        hD - T * 0.5);  // front
-
 
     const shellMaterial = new THREE.MeshStandardMaterial({
       color: 0x20293a,
@@ -113,7 +74,10 @@ export default class BoardScene {
     const leftPanel = new THREE.Mesh(new THREE.BoxGeometry(0.08, height, depth), faceMaterials.left);
     leftPanel.position.set(-halfW + 0.04, 0, 0);
     this.group.add(leftPanel);
-    // Assembly view keeps the near-side panel removed so the interior is clearly visible.
+
+    const rightPanel = new THREE.Mesh(new THREE.BoxGeometry(0.08, height, depth), faceMaterials.right);
+    rightPanel.position.set(halfW - 0.04, 0, 0);
+    this.group.add(rightPanel);
 
     const topVentStripes = new THREE.Group();
     for (let i = 0; i < 18; i += 1) {
@@ -134,6 +98,40 @@ export default class BoardScene {
       emissiveIntensity: 0.2,
     });
     const rearHoleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f1622, roughness: 0.92, metalness: 0.02 });
+
+    const rearIoPlate = new THREE.Mesh(new THREE.BoxGeometry(0.62 * scale.x, 1.0 * scale.y, 0.03), rearFeatureMaterial);
+    rearIoPlate.position.set(-1.02 * scale.x, 0.95 * scale.y, rearPanelZ - 0.05);
+    this.group.add(rearIoPlate);
+
+    const rearIoHole = new THREE.Mesh(new THREE.BoxGeometry(0.52 * scale.x, 0.86 * scale.y, 0.02), rearHoleMaterial);
+    rearIoHole.position.set(rearIoPlate.position.x, rearIoPlate.position.y, rearIoPlate.position.z + 0.01);
+    this.group.add(rearIoHole);
+
+    const pcieStackFrame = new THREE.Mesh(new THREE.BoxGeometry(0.74 * scale.x, 1.2 * scale.y, 0.03), rearFeatureMaterial);
+    pcieStackFrame.position.set(-0.2 * scale.x, -0.05 * scale.y, rearPanelZ - 0.05);
+    this.group.add(pcieStackFrame);
+
+    for (let i = 0; i < 7; i += 1) {
+      const pcieSlot = new THREE.Mesh(new THREE.BoxGeometry(0.58 * scale.x, 0.1 * scale.y, 0.02), rearHoleMaterial);
+      pcieSlot.position.set(pcieStackFrame.position.x, pcieStackFrame.position.y - 0.52 * scale.y + i * 0.17 * scale.y, pcieStackFrame.position.z + 0.01);
+      this.group.add(pcieSlot);
+    }
+
+    const rearFanFrame = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.52 * scale.y, 0.52 * scale.y, 0.03, 20),
+      rearFeatureMaterial,
+    );
+    rearFanFrame.rotation.x = Math.PI / 2;
+    rearFanFrame.position.set(0.8 * scale.x, 1.12 * scale.y, rearPanelZ - 0.05);
+    this.group.add(rearFanFrame);
+
+    const rearFanHole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42 * scale.y, 0.42 * scale.y, 0.02, 20),
+      rearHoleMaterial,
+    );
+    rearFanHole.rotation.x = Math.PI / 2;
+    rearFanHole.position.set(rearFanFrame.position.x, rearFanFrame.position.y, rearFanFrame.position.z + 0.01);
+    this.group.add(rearFanHole);
 
     const topPanel = new THREE.Mesh(new THREE.BoxGeometry(width, 0.12, depth), shellMaterial);
     topPanel.position.set(0, halfH - 0.06, 0);
@@ -176,34 +174,43 @@ export default class BoardScene {
     psuShroud.position.set(0, -halfH + height * 0.13, halfD - depth * 0.28);
     this.group.add(psuShroud);
 
-    const frontMountRailMaterial = new THREE.MeshStandardMaterial({ color: 0x2f405b, roughness: 0.88, metalness: 0.06 });
-    const frontRailTop = new THREE.Mesh(
-      new THREE.BoxGeometry(0.03, 0.04, depth * 0.72),
-      frontMountRailMaterial,
+    const frontIntakeBracket = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, height * 0.56, depth * 0.64),
+      new THREE.MeshStandardMaterial({ color: 0x2f405b, roughness: 0.88, metalness: 0.06 }),
     );
-    frontRailTop.position.set(halfW - 0.06, 1.55 * scale.y, 0);
-    this.group.add(frontRailTop);
+    frontIntakeBracket.position.set(halfW - 0.08, height * 0.02, 0);
+    this.group.add(frontIntakeBracket);
 
-    const frontRailBottom = frontRailTop.clone();
-    frontRailBottom.position.y = -1.55 * scale.y;
-    this.group.add(frontRailBottom);
+    const frontVentMaterial = new THREE.MeshStandardMaterial({ color: 0x72839b, roughness: 0.88, metalness: 0.03 });
+    for (let i = 0; i < 10; i += 1) {
+      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.2 * scale.y, depth * 0.54), frontVentMaterial);
+      vent.position.set(halfW - 0.048, -0.95 * scale.y + i * 0.22 * scale.y, 0);
+      this.group.add(vent);
+    }
 
     const board = new THREE.Mesh(
       new THREE.BoxGeometry(3.8 * scale.x, 3.35 * scale.y, 0.12),
       new THREE.MeshStandardMaterial({ color: 0x295033, roughness: 0.76, metalness: 0.06 }),
     );
-    const boardMountX = -0.72 * scale.x;
-    const boardMountY = 0.92 * scale.y;
-    const boardMountZ = -halfD + 0.36 * scale.z;
-    board.position.set(boardMountX, boardMountY, boardMountZ);
-    this.group.add(board);
+
+    // Anchor Motherboard to the rear-left wall of the case
+    // Shifted X slightly right to prevent bleeding through the side panel
+    // Z is strictly tied to rearPanelZ to ensure it's flush against the back
+    const boardMountX = -halfW + 0.3 * scale.x;
+    const boardMountY = 0.22 * scale.y;
+    const boardMountZ = rearPanelZ + 0.05;
+
+    this.motherboardGroup.position.set(boardMountX, boardMountY, boardMountZ);
+    board.position.set(0, 0, 0);
+    this.motherboardGroup.add(board);
+    this.group.add(this.motherboardGroup);
 
     const moboTray = new THREE.Mesh(
       new THREE.BoxGeometry(4.2 * scale.x, 3.8 * scale.y, 0.05),
       new THREE.MeshStandardMaterial({ color: 0x202e45, roughness: 0.86, metalness: 0.05 }),
     );
-    moboTray.position.set(board.position.x, board.position.y, board.position.z - 0.08);
-    this.group.add(moboTray);
+    moboTray.position.set(0, 0, -0.08);
+    this.motherboardGroup.add(moboTray);
 
     const standoffMaterial = new THREE.MeshStandardMaterial({ color: 0xb49154, roughness: 0.68, metalness: 0.12 });
     const standoffOffsets = [
@@ -253,7 +260,7 @@ export default class BoardScene {
       this.group.add(vrmBlock);
     });
 
-    [0.48, 0.72, 0.96, 1.2].forEach((xOffset) => {
+    [0.72, 0.96].forEach((xOffset) => {
       const ramRail = new THREE.Mesh(
         new THREE.BoxGeometry(0.18 * scale.x, 1.35 * scale.y, 0.12),
         new THREE.MeshStandardMaterial({ color: 0x242a33, roughness: 0.74, metalness: 0.12 }),
@@ -269,161 +276,70 @@ export default class BoardScene {
     pcieRail.position.set(board.position.x - 0.35 * scale.x, board.position.y - 0.62 * scale.y, board.position.z + 0.08);
     this.group.add(pcieRail);
 
+    const rearInterfaceX = -halfW + 0.82 * scale.x;
+
     const ioShield = new THREE.Mesh(
-      new THREE.BoxGeometry(0.58 * scale.x, 1.04 * scale.y, 0.04),
-      new THREE.MeshStandardMaterial({ color: 0xbfcbdc, roughness: 0.58, metalness: 0.24 }),
+      new THREE.BoxGeometry(0.52 * scale.x, 0.92 * scale.y, 0.04),
+      new THREE.MeshStandardMaterial({ color: 0xbdc8d8, roughness: 0.62, metalness: 0.22 }),
     );
-    ioShield.position.set(board.position.x - 1.54 * scale.x, board.position.y + 1.0 * scale.y, rearPanelZ - 0.05);
+    ioShield.position.set(boardMountX - 0.05 * scale.x, board.position.y + 0.46 * scale.y, rearPanelZ - 0.02);
     this.group.add(ioShield);
 
-    // I/O Panel detailed ports
-    const ioClusterMaterial = new THREE.MeshStandardMaterial({ color: 0x151b24, roughness: 0.7, metalness: 0.08 });
-    const ioPortFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x2a313d, roughness: 0.6, metalness: 0.15 });
-    const usbColorMaterial = new THREE.MeshStandardMaterial({ color: 0x3a6ea5, roughness: 0.5, metalness: 0.2, emissive: 0x1a3a5a, emissiveIntensity: 0.2 });
-    const usb3ColorMaterial = new THREE.MeshStandardMaterial({ color: 0x3a8ea5, roughness: 0.5, metalness: 0.2, emissive: 0x1a5a6a, emissiveIntensity: 0.2 });
-
-    // USB port rows (top section)
-    const usbRows = [0.32, 0.18, 0.04];
-    usbRows.forEach((rowY) => {
-      // USB-A ports (2 per row)
-      for (let i = 0; i < 2; i++) {
-        const usbFrame = new THREE.Mesh(new THREE.BoxGeometry(0.14 * scale.x, 0.1 * scale.y, 0.03), ioPortFrameMaterial);
-        usbFrame.position.set(ioShield.position.x - 0.12 * scale.x + i * 0.16 * scale.x, ioShield.position.y + rowY * scale.y, ioShield.position.z + 0.03);
-        this.group.add(usbFrame);
-
-        // USB tongue (plastic insert)
-        const usbTongue = new THREE.Mesh(new THREE.BoxGeometry(0.08 * scale.x, 0.04 * scale.y, 0.02), i === 0 ? usbColorMaterial : usb3ColorMaterial);
-        usbTongue.position.set(usbFrame.position.x, usbFrame.position.y, usbFrame.position.z + 0.02);
-        this.group.add(usbTongue);
-      }
-    });
-
-    // Ethernet port
-    const lanPort = new THREE.Mesh(new THREE.BoxGeometry(0.18 * scale.x, 0.16 * scale.y, 0.03), ioClusterMaterial);
-    lanPort.position.set(ioShield.position.x + 0.35 * scale.x, ioShield.position.y + 0.18 * scale.y, ioShield.position.z + 0.03);
-    this.group.add(lanPort);
-
-    // Ethernet port pins
-    for (let i = 0; i < 8; i++) {
-      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.015 * scale.x, 0.06 * scale.y, 0.02), new THREE.MeshStandardMaterial({ color: 0xd4a843, roughness: 0.4, metalness: 0.4 }));
-      pin.position.set(lanPort.position.x, lanPort.position.y - 0.04 + i * 0.012 * scale.y, lanPort.position.z + 0.02);
-      this.group.add(pin);
-    }
-
-    // Audio jacks (circular ports)
-    const audioJackMaterial = new THREE.MeshStandardMaterial({ color: 0x121720, roughness: 0.72, metalness: 0.1 });
-    const audioColors = [0x00ff00, 0xff6600, 0x0000ff, 0xff0000, 0x6600ff];
-    [-0.12, 0.0, 0.12, 0.24, 0.36].forEach((xOffset, idx) => {
-      const jackRing = new THREE.Mesh(new THREE.CylinderGeometry(0.05 * scale.y, 0.05 * scale.y, 0.02, 16), audioJackMaterial);
-      jackRing.rotation.x = Math.PI / 2;
-      jackRing.position.set(
-        ioShield.position.x + xOffset * scale.x,
-        ioShield.position.y - 0.35 * scale.y,
+    // Motherboard rear I/O cluster (USB/LAN/audio blocks) for clear rear-panel readability.
+    const ioPortMaterial = new THREE.MeshStandardMaterial({ color: 0x11151d, roughness: 0.72, metalness: 0.1 });
+    const ioPortDefs = [
+      { x: -0.12, y: 0.26, w: 0.16, h: 0.12 },
+      { x: 0.08, y: 0.26, w: 0.16, h: 0.12 },
+      { x: -0.12, y: 0.08, w: 0.16, h: 0.12 },
+      { x: 0.08, y: 0.08, w: 0.16, h: 0.12 },
+      { x: -0.12, y: -0.1, w: 0.16, h: 0.12 },
+      { x: 0.08, y: -0.1, w: 0.16, h: 0.12 },
+    ];
+    ioPortDefs.forEach((port) => {
+      const ioPort = new THREE.Mesh(
+        new THREE.BoxGeometry(port.w * scale.x, port.h * scale.y, 0.02),
+        ioPortMaterial,
+      );
+      ioPort.position.set(
+        ioShield.position.x + port.x * scale.x,
+        ioShield.position.y + port.y * scale.y,
         ioShield.position.z + 0.03,
       );
-      this.group.add(jackRing);
-
-      // Colored center for each jack
-      const jackCenter = new THREE.Mesh(new THREE.CylinderGeometry(0.025 * scale.y, 0.025 * scale.y, 0.025, 12), new THREE.MeshStandardMaterial({ color: audioColors[idx % audioColors.length], roughness: 0.6, metalness: 0.1 }));
-      jackCenter.rotation.x = Math.PI / 2;
-      jackCenter.position.set(
-        ioShield.position.x + xOffset * scale.x,
-        ioShield.position.y - 0.35 * scale.y,
-        ioShield.position.z + 0.04,
-      );
-      this.group.add(jackCenter);
+      this.group.add(ioPort);
     });
 
-    // DisplayPort / HDMI ports
-    const dpPort = new THREE.Mesh(new THREE.BoxGeometry(0.12 * scale.x, 0.08 * scale.y, 0.02), new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.7, metalness: 0.1 }));
-    dpPort.position.set(ioShield.position.x - 0.12 * scale.x, ioShield.position.y - 0.18 * scale.y, ioShield.position.z + 0.03);
-    this.group.add(dpPort);
-
-    const hdmiPort = new THREE.Mesh(new THREE.BoxGeometry(0.14 * scale.x, 0.06 * scale.y, 0.02), new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.7, metalness: 0.1 }));
-    hdmiPort.position.set(ioShield.position.x + 0.02 * scale.x, ioShield.position.y - 0.18 * scale.y, ioShield.position.z + 0.03);
-    this.group.add(hdmiPort);
-
-    // I/O Shield frame
     const ioFrame = new THREE.Mesh(
-      new THREE.BoxGeometry(0.68 * scale.x, 1.08 * scale.y, 0.02),
+      new THREE.BoxGeometry(0.6 * scale.x, 1.0 * scale.y, 0.02),
       new THREE.MeshStandardMaterial({ color: 0xd7e0eb, roughness: 0.62, metalness: 0.2 }),
     );
     ioFrame.position.set(ioShield.position.x, ioShield.position.y, ioShield.position.z + 0.01);
     this.group.add(ioFrame);
 
-    // Screw holes for I/O shield
-    const ioScrewMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.8 });
-    const ioScrewPositions = [
-      [-0.32, 0.48], [0.32, 0.48],
-      [-0.32, -0.48], [0.32, -0.48],
-    ];
-    ioScrewPositions.forEach(([xOffset, yOffset]) => {
-      const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.04 * scale.x, 0.04 * scale.x, 0.03, 10), ioScrewMaterial);
-      screw.rotation.x = Math.PI / 2;
-      screw.position.set(ioShield.position.x + xOffset * scale.x, ioShield.position.y + yOffset * scale.y, ioShield.position.z + 0.02);
-      this.group.add(screw);
-    });
-
-    // PCIe slot cutouts on rear panel - for GPU bracket and expansion cards
     const pcieCutoutMaterial = new THREE.MeshStandardMaterial({ color: 0x8fa2bc, roughness: 0.74, metalness: 0.14 });
     const pcieSlotHoleMaterial = new THREE.MeshStandardMaterial({ color: 0x11151d, roughness: 0.92, metalness: 0.02 });
-    const pcieStackX = ioShield.position.x + 0.82 * scale.x;
-    const pcieStackTopY = board.position.y - 0.32 * scale.y;
+    for (let i = 0; i < 4; i += 1) {
+      const pcieCutout = new THREE.Mesh(new THREE.BoxGeometry(0.62 * scale.x, 0.08 * scale.y, 0.03), pcieCutoutMaterial);
+      pcieCutout.position.set(-0.2 * scale.x, board.position.y - 0.42 * scale.y - i * 0.2 * scale.y, rearPanelZ - 0.05);
+      this.group.add(pcieCutout);
 
-    // GPU bracket slot (primary PCIe x16 slot) - larger cutout for GPU bracket
-    const gpuBracketCutout = new THREE.Mesh(new THREE.BoxGeometry(0.18 * scale.x, 0.95 * scale.y, 0.04), pcieSlotHoleMaterial);
-    gpuBracketCutout.position.set(pcieStackX, pcieStackTopY + 0.05 * scale.y, rearPanelZ - 0.06);
-    this.group.add(gpuBracketCutout);
-
-    // GPU bracket mounting screw holes
-    const gpuBracketScrewTop = new THREE.Mesh(new THREE.CylinderGeometry(0.03 * scale.y, 0.03 * scale.y, 0.03, 10), ioScrewMaterial);
-    gpuBracketScrewTop.rotation.x = Math.PI / 2;
-    gpuBracketScrewTop.position.set(pcieStackX, pcieStackTopY + 0.42 * scale.y, rearPanelZ - 0.05);
-    this.group.add(gpuBracketScrewTop);
-
-    const gpuBracketScrewBottom = new THREE.Mesh(new THREE.CylinderGeometry(0.03 * scale.y, 0.03 * scale.y, 0.03, 10), ioScrewMaterial);
-    gpuBracketScrewBottom.rotation.x = Math.PI / 2;
-    gpuBracketScrewBottom.position.set(pcieStackX, pcieStackTopY - 0.42 * scale.y, rearPanelZ - 0.05);
-    this.group.add(gpuBracketScrewBottom);
-
-    // Expansion slot cutouts below GPU
-    for (let i = 1; i < 6; i += 1) {
-      const expansionCutout = new THREE.Mesh(new THREE.BoxGeometry(0.55 * scale.x, 0.07 * scale.y, 0.03), pcieCutoutMaterial);
-      expansionCutout.position.set(pcieStackX, pcieStackTopY - i * 0.21 * scale.y, rearPanelZ - 0.05);
-      this.group.add(expansionCutout);
-
-      const expansionHole = new THREE.Mesh(new THREE.BoxGeometry(0.42 * scale.x, 0.035 * scale.y, 0.02), pcieSlotHoleMaterial);
-      expansionHole.position.set(expansionCutout.position.x, expansionCutout.position.y, expansionCutout.position.z + 0.02);
-      this.group.add(expansionHole);
-
-      // Expansion slot screw hole
-      const expansionScrew = new THREE.Mesh(new THREE.CylinderGeometry(0.025 * scale.y, 0.025 * scale.y, 0.03, 10), ioScrewMaterial);
-      expansionScrew.rotation.x = Math.PI / 2;
-      expansionScrew.position.set(pcieStackX, pcieStackTopY - i * 0.21 * scale.y + 0.035 * scale.y, rearPanelZ - 0.04);
-      this.group.add(expansionScrew);
+      const pcieHole = new THREE.Mesh(new THREE.BoxGeometry(0.48 * scale.x, 0.04 * scale.y, 0.02), pcieSlotHoleMaterial);
+      pcieHole.position.set(pcieCutout.position.x, pcieCutout.position.y, pcieCutout.position.z + 0.02);
+      this.group.add(pcieHole);
     }
 
-    // GPU I/O bracket vertical plate - covers the cutout area
+    // GPU I/O bracket vertical plate next to the PCIe stack.
     const gpuIoBracket = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06 * scale.x, 0.92 * scale.y, 0.15),
-      new THREE.MeshStandardMaterial({ color: 0xc4d0df, roughness: 0.5, metalness: 0.35 }),
+      new THREE.BoxGeometry(0.08 * scale.x, 0.86 * scale.y, 0.04),
+      new THREE.MeshStandardMaterial({ color: 0xc4d0df, roughness: 0.68, metalness: 0.16 }),
     );
-    gpuIoBracket.position.set(pcieStackX - 0.14 * scale.x, pcieStackTopY, rearPanelZ - 0.08);
+    gpuIoBracket.position.set(boardMountX - 0.05 * scale.x, board.position.y - 0.72 * scale.y, rearPanelZ - 0.02);
     this.group.add(gpuIoBracket);
-
-    // GPU bracket ventilation holes
-    for (let i = 0; i < 6; i++) {
-      const ventHole = new THREE.Mesh(new THREE.CylinderGeometry(0.04 * scale.y, 0.04 * scale.y, 0.04, 12), new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.8, metalness: 0.05 }));
-      ventHole.rotation.x = Math.PI / 2;
-      ventHole.position.set(gpuIoBracket.position.x, gpuIoBracket.position.y + 0.35 * scale.y - i * 0.14 * scale.y, gpuIoBracket.position.z + 0.02);
-      this.group.add(ventHole);
-    }
 
     const psuCutout = new THREE.Mesh(
       new THREE.BoxGeometry(1.25 * scale.x, 0.78 * scale.y, 0.04),
       new THREE.MeshStandardMaterial({ color: 0x435873, roughness: 0.84, metalness: 0.05 }),
     );
-    psuCutout.position.set(halfW - 1.02 * scale.x, -halfH + 0.74 * scale.y, -halfD + 0.145);
+    psuCutout.position.set(1.42 * scale.x, -halfH + 0.74 * scale.y, -halfD + 0.145);
     this.group.add(psuCutout);
 
     const rearFanCutout = new THREE.Mesh(
@@ -434,144 +350,72 @@ export default class BoardScene {
     rearFanCutout.position.set(0.48 * scale.x, 1.0 * scale.y, -halfD + 0.145);
     this.group.add(rearFanCutout);
 
-    const screwMaterial = new THREE.MeshStandardMaterial({ color: 0x10161f, roughness: 0.72, metalness: 0.08 });
-    const rearFanScrewOffsets = [
-      [-0.32, -0.32],
-      [0.32, -0.32],
-      [-0.32, 0.32],
-      [0.32, 0.32],
-    ];
-    rearFanScrewOffsets.forEach(([xOffset, yOffset]) => {
-      const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.03, 10), screwMaterial);
-      screw.rotation.x = Math.PI / 2;
-      screw.position.set(
-        rearFanCutout.position.x + xOffset * scale.y,
-        rearFanCutout.position.y + yOffset * scale.y,
-        rearFanCutout.position.z + 0.01,
-      );
-      this.group.add(screw);
-    });
-
-    // Rear fan perforation ring for realistic back-panel ventilation.
-    for (let i = 0; i < 16; i += 1) {
-      const angle = (i / 16) * Math.PI * 2;
-      const radialHole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.032 * scale.y, 0.032 * scale.y, 0.03, 10),
-        rearHoleMaterial,
-      );
-      radialHole.rotation.x = Math.PI / 2;
-      radialHole.position.set(
-        rearFanCutout.position.x + Math.cos(angle) * 0.27 * scale.y,
-        rearFanCutout.position.y + Math.sin(angle) * 0.27 * scale.y,
-        rearFanCutout.position.z + 0.01,
-      );
-      this.group.add(radialHole);
-    }
-
-    const frontFanMountMaterial = new THREE.MeshStandardMaterial({ color: 0x364a66, roughness: 0.88, metalness: 0.06 });
-    const frontFanHoleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f1622, roughness: 0.92, metalness: 0.02 });
-
-    [-0.78, 0.78].forEach((yOffset) => {
-      const fanFrame = new THREE.Mesh(new THREE.BoxGeometry(1.12 * scale.x, 1.12 * scale.y, 0.04), frontFanMountMaterial);
-      fanFrame.position.set(0.25 * scale.x, yOffset * scale.y, halfD - 0.03);
-      this.group.add(fanFrame);
-
-      const fanHole = new THREE.Mesh(new THREE.CylinderGeometry(0.4 * scale.y, 0.4 * scale.y, 0.035, 24), frontFanHoleMaterial);
-      fanHole.rotation.x = Math.PI / 2;
-      fanHole.position.set(fanFrame.position.x, fanFrame.position.y, fanFrame.position.z + 0.01);
-      this.group.add(fanHole);
-    });
-
-    [-0.62, 0.62].forEach((xOffset) => {
-      const topFanFrame = new THREE.Mesh(new THREE.BoxGeometry(1.12 * scale.x, 0.04, 1.12 * scale.z), frontFanMountMaterial);
-      topFanFrame.position.set(xOffset * scale.x, halfH - 0.03, 0.15 * scale.z);
-      this.group.add(topFanFrame);
-
-      const topFanHole = new THREE.Mesh(new THREE.CylinderGeometry(0.4 * scale.x, 0.4 * scale.x, 0.035, 24), frontFanHoleMaterial);
-      topFanHole.rotation.z = Math.PI / 2;
-      topFanHole.position.set(topFanFrame.position.x, topFanFrame.position.y + 0.005, topFanFrame.position.z);
-      this.group.add(topFanHole);
-    });
-
     const boardPos = board.position;
 
     const slotDefs = [
       {
         key: 'case_shell',
-        pos: [halfW - 0.12, -halfH + 0.36 * scale.y, halfD - 0.32 * scale.z],
-        size: [0.18 * scale.x, 0.18 * scale.y, 0.18 * scale.z],
+        pos: [halfW - 0.03, 0, 0],
+        size: [0.08, 7.1 * scale.y, 3.1 * scale.z],
         label: 'CASE SHELL',
         desc: 'Side panel access is removed while assembling.',
+        relative: false,
       },
       {
         key: 'mobo',
-        pos: [boardPos.x, boardPos.y, boardPos.z + 0.07],
+        pos: [0, 0, 0.07],
         size: [3.8 * scale.x, 3.35 * scale.y, 0.14],
         label: 'MOTHERBOARD MOUNT',
         desc: 'Install a compatible motherboard for this case.',
+        relative: true,
       },
       {
         key: 'cpu_socket',
-        pos: [boardPos.x - 0.75 * scale.x, boardPos.y + 0.62 * scale.y, boardPos.z + 0.11],
+        pos: [-0.75 * scale.x, 0.62 * scale.y, 0.11],
         size: [0.82 * scale.x, 0.82 * scale.y, 0.15],
         label: 'CPU SOCKET',
         desc: 'Processor socket on the motherboard.',
+        relative: true,
       },
       {
         key: 'ram1',
-        pos: [boardPos.x + 0.72 * scale.x, boardPos.y + 0.18 * scale.y, boardPos.z + 0.1],
+        pos: [0.72 * scale.x, 0.18 * scale.y, 0.1],
         size: [0.14 * scale.x, 1.3 * scale.y, 0.14],
         label: 'RAM SLOT A1',
         desc: 'Primary memory slot.',
+        relative: true,
       },
       {
         key: 'ram2',
-        pos: [boardPos.x + 0.96 * scale.x, boardPos.y + 0.18 * scale.y, boardPos.z + 0.1],
+        pos: [0.96 * scale.x, 0.18 * scale.y, 0.1],
         size: [0.14 * scale.x, 1.3 * scale.y, 0.14],
         label: 'RAM SLOT A2',
         desc: 'Secondary memory slot.',
-      },
-      {
-        key: 'ram3',
-        pos: [boardPos.x + 0.48 * scale.x, boardPos.y + 0.18 * scale.y, boardPos.z + 0.1],
-        size: [0.14 * scale.x, 1.3 * scale.y, 0.14],
-        label: 'RAM SLOT B1',
-        desc: 'Additional memory slot.',
-      },
-      {
-        key: 'ram4',
-        pos: [boardPos.x + 1.2 * scale.x, boardPos.y + 0.18 * scale.y, boardPos.z + 0.1],
-        size: [0.14 * scale.x, 1.3 * scale.y, 0.14],
-        label: 'RAM SLOT B2',
-        desc: 'Additional memory slot.',
+        relative: true,
       },
       {
         key: 'pcie1',
-        pos: [boardPos.x - 0.35 * scale.x, boardPos.y - 0.62 * scale.y, boardPos.z + 0.1],
+        pos: [-0.35 * scale.x, -0.62 * scale.y, 0.1],
         size: [1.95 * scale.x, 0.11 * scale.y, 0.18],
         label: 'PCIe x16 SLOT',
         desc: 'Primary graphics card slot.',
+        relative: true,
       },
       {
         key: 'm2_1',
-        pos: [boardPos.x - 0.2 * scale.x, boardPos.y - 0.92 * scale.y, boardPos.z + 0.1],
+        pos: [-0.2 * scale.x, -0.92 * scale.y, 0.1],
         size: [1.55 * scale.x, 0.08 * scale.y, 0.12],
         label: 'M.2 SLOT',
         desc: 'NVMe storage lane.',
-      },
-      {
-        key: 'm2_2',
-        pos: [boardPos.x - 0.15 * scale.x, boardPos.y - 1.18 * scale.y, boardPos.z + 0.1],
-        size: [1.35 * scale.x, 0.08 * scale.y, 0.12],
-        label: 'M.2 SLOT 2',
-        desc: 'Secondary NVMe storage lane.',
+        relative: true,
       },
       {
         key: 'sata1',
-        pos: [boardPos.x + 1.55 * scale.x, boardPos.y - 1.05 * scale.y, boardPos.z + 0.1],
+        pos: [1.55 * scale.x, -1.05 * scale.y, 0.1],
         size: [0.3 * scale.x, 0.18 * scale.y, 0.13],
         label: 'SATA BAY',
         desc: '2.5"/3.5" storage connection point.',
+        relative: true,
       },
       {
         key: 'psu_bay',
@@ -579,34 +423,23 @@ export default class BoardScene {
         size: [1.7 * scale.x, 1.05 * scale.y, 1.55 * scale.z],
         label: 'PSU BAY',
         desc: 'Install power supply unit.',
+        relative: false,
       },
       {
         key: 'fan_front1',
-        pos: [0.15 * scale.x, 0.78 * scale.y, halfD - 0.07],
-        size: [1.22 * scale.x, 1.22 * scale.y, 0.12],
+        pos: [halfW - 0.2, 0.5 * scale.y, 0],
+        size: [0.12, 1.22 * scale.y, 1.22 * scale.z],
         label: 'FRONT FAN MOUNT',
         desc: 'Front intake fan location.',
-      },
-      {
-        key: 'fan_front2',
-        pos: [0.15 * scale.x, -0.78 * scale.y, halfD - 0.07],
-        size: [1.22 * scale.x, 1.22 * scale.y, 0.12],
-        label: 'FRONT FAN MOUNT 2',
-        desc: 'Lower front intake fan location.',
+        relative: false,
       },
       {
         key: 'fan_top1',
-        pos: [-0.62 * scale.x, halfH - 0.07, 0.15 * scale.z],
+        pos: [0.2 * scale.x, halfH - 0.22, 0],
         size: [1.22 * scale.x, 0.12, 1.22 * scale.z],
         label: 'TOP FAN MOUNT',
         desc: 'Top exhaust fan location.',
-      },
-      {
-        key: 'fan_top2',
-        pos: [0.62 * scale.x, halfH - 0.07, 0.15 * scale.z],
-        size: [1.22 * scale.x, 0.12, 1.22 * scale.z],
-        label: 'TOP FAN MOUNT 2',
-        desc: 'Secondary top exhaust fan location.',
+        relative: false,
       },
       {
         key: 'fan_rear1',
@@ -614,6 +447,7 @@ export default class BoardScene {
         size: [0.98 * scale.y, 0.98 * scale.y, 0.12],
         label: 'REAR FAN MOUNT',
         desc: 'Rear exhaust fan location.',
+        relative: false,
       },
     ];
 
@@ -622,17 +456,21 @@ export default class BoardScene {
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(def.size[0], def.size[1], def.size[2]),
         new THREE.MeshStandardMaterial({
-          color: isCaseShell ? 0x1f2c3b : 0x2d3f5c,
+          color: isCaseShell ? 0x536173 : 0x2d3f5c,
           roughness: 0.92,
           metalness: 0.02,
           transparent: true,
-          opacity: isCaseShell ? 0.0 : 0.08,
+          opacity: isCaseShell ? 0.02 : 0.08,
           depthWrite: false,
         }),
       );
       mesh.position.set(...def.pos);
       mesh.userData = { slotKey: def.key, label: def.label, desc: def.desc };
-      this.group.add(mesh);
+      if (def.relative) {
+        this.motherboardGroup.add(mesh);
+      } else {
+        this.group.add(mesh);
+      }
       this.slotRegistry.register(def.key, mesh, def);
     });
 

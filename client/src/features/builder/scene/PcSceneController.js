@@ -19,7 +19,6 @@ export default class PcSceneController {
     this.installedParts = {};
     this.casePreset = 'atx-mid';
     this.motherboard = null;
-    this.graphicsMode = 'stylized';
     this.animationFrame = 0;
     this.spherical = { theta: 0.25, phi: 0.5, radius: 16 };
     this.target = new THREE.Vector3(0, 0, 0);
@@ -72,7 +71,6 @@ export default class PcSceneController {
     this.boardScene.setMotherboard(this.motherboard);
     this.boardScene.build();
     this.partRenderer = new PartRenderer(this.boardScene.group);
-    this.partRenderer.setGraphicsMode(this.graphicsMode);
 
     this.handleResize = this.handleResize.bind(this);
     this.onPointerDown = this.onPointerDown.bind(this);
@@ -187,30 +185,13 @@ export default class PcSceneController {
   updateSlotHighlight() {
     this.slotRegistry.values().forEach(({ mesh }) => {
       mesh.material = new THREE.MeshStandardMaterial({
-        color: 0x2d3d56,
+        color: 0x3d5477,
         roughness: 0.94,
         metalness: 0.02,
         transparent: true,
-        opacity: 0.03,
-        wireframe: true,
+        opacity: 0.22,
       });
     });
-
-    if (this.pendingPart) {
-      this.slotRegistry.values().forEach(({ mesh }) => {
-        if (!this.isSlotCompatibleForPending(this.pendingPart, mesh.userData.slotKey)) return;
-        mesh.material = new THREE.MeshStandardMaterial({
-          color: 0x73d8ff,
-          roughness: 0.86,
-          metalness: 0.08,
-          emissive: 0x1c5774,
-          emissiveIntensity: 0.45,
-          transparent: true,
-          opacity: 0.34,
-          wireframe: true,
-        });
-      });
-    }
 
     const slotKey = this.selectedSlot || this.hoverSlot;
     if (!slotKey) return;
@@ -219,29 +200,14 @@ export default class PcSceneController {
     if (!slot) return;
 
     slot.mesh.material = new THREE.MeshStandardMaterial({
-      color: 0x9ad9ff,
+      color: 0x6ea0ea,
       roughness: 0.82,
       metalness: 0.08,
-      emissive: 0x2b8bc1,
-      emissiveIntensity: 0.7,
+      emissive: 0x234a82,
+      emissiveIntensity: 0.58,
       transparent: true,
       opacity: 0.42,
-      wireframe: true,
     });
-  }
-
-  isSlotCompatibleForPending(part, slotKey) {
-    const kind = part?.kind || part?.category;
-    if (!kind || !slotKey) return false;
-    if (kind === 'Motherboard') return slotKey === 'mobo';
-    if (kind === 'CPU') return slotKey === 'cpu_socket';
-    if (kind === 'RAM') return slotKey.startsWith('ram');
-    if (kind === 'GPU') return slotKey === 'pcie1';
-    if (kind === 'PSU') return slotKey === 'psu_bay';
-    if (kind === 'Fans') return slotKey.startsWith('fan_');
-    if (kind === 'Storage') return slotKey.startsWith('m2') || slotKey === 'sata1';
-    if (kind === 'Case') return slotKey === 'case_shell';
-    return false;
   }
 
   setSelectedSlot(slotKey) {
@@ -251,7 +217,6 @@ export default class PcSceneController {
 
   setPendingPart(part) {
     this.pendingPart = part;
-    this.updateSlotHighlight();
   }
 
   setInstalledParts(installedParts) {
@@ -268,7 +233,6 @@ export default class PcSceneController {
     this.boardScene.setMotherboard(this.motherboard);
     this.boardScene.build();
     this.partRenderer.boardGroup = this.boardScene.group;
-    this.partRenderer.setGraphicsMode(this.graphicsMode);
     this.setInstalledParts(this.installedParts);
     this.applyView();
   }
@@ -283,23 +247,8 @@ export default class PcSceneController {
     this.motherboard = motherboard;
   }
 
-  setGraphicsMode(mode) {
-    this.graphicsMode = mode;
-    this.partRenderer?.setGraphicsMode(mode);
-    this.setInstalledParts(this.installedParts);
-    if (mode === 'real') {
-      this.renderer.toneMappingExposure = 1.32;
-      this.scene.fog.density = 0.015;
-      this.scene.background = new THREE.Color(0x2a313d);
-    } else {
-      this.renderer.toneMappingExposure = 1.2;
-      this.scene.fog.density = 0.018;
-      this.scene.background = new THREE.Color(0x131b2d);
-    }
-  }
-
   setView(view) {
-    this.view = view === 'mobo' ? 'mobo' : 'case';
+    this.view = view;
     this.applyView();
   }
 
@@ -307,6 +256,9 @@ export default class PcSceneController {
     if (this.view === 'case') {
       this.spherical = { theta: 0.9, phi: 1.36, radius: 12.8 };
       this.target = new THREE.Vector3(0, 0.1, -0.6);
+    } else if (this.view === 'rear') {
+      this.spherical = { theta: -3.05, phi: 1.3, radius: 10.4 };
+      this.target = new THREE.Vector3(-0.35, 0.28, -1.65);
     } else {
       this.spherical = { theta: -0.34, phi: 1.02, radius: 8.6 };
       this.target = new THREE.Vector3(-0.65, 0.35, -1.45);

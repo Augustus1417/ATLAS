@@ -50,10 +50,10 @@ def login_user(payload: UserLoginRequest, conn=Depends(get_db_connection)):
         """
         SELECT user_id, role_id, username, email, password_hash, is_active, created_at
         FROM users
-        WHERE LOWER(email) = LOWER(%s)
+        WHERE LOWER(email) = LOWER(%s) OR LOWER(username) = LOWER(%s)
         LIMIT 1
         """,
-        (payload.email,),
+        (payload.identifier, payload.identifier),
     )
     user = cur.fetchone()
     cur.close()

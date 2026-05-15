@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
-import BuildSummary from './BuildSummary';
+import { Link } from 'react-router-dom';
+import { atlasApi } from '../../services/atlasApi';
 import { formatCurrency } from './utils/priceMath';
+
+const QUANTITY_PART_KINDS = new Set(['RAM', 'Storage', 'Fans']);
 
 function formatSlotHint(slotHint) {
   const labels = {
@@ -19,9 +22,7 @@ function formatSlotHint(slotHint) {
     sata1: 'SATA bay',
     psu_bay: 'PSU bay',
     fan_front1: 'Front fan mount',
-    fan_front2: 'Front fan mount',
     fan_top1: 'Top fan mount',
-    fan_top2: 'Top fan mount',
     fan_rear1: 'Rear fan mount',
   };
 
@@ -30,70 +31,112 @@ function formatSlotHint(slotHint) {
 
 export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
   const [openKey, setOpenKey] = useState(build.activeSectionKey);
+  const [syncError, setSyncError] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(true);
 
   useEffect(() => {
     setOpenKey(build.activeSectionKey);
   }, [build.activeSectionKey]);
 
+  const handleWorkloadChange = async (value) => {
+    build.setWorkload(value);
+    setSyncing(true);
+    setSyncError('');
+    try {
+      const recs = await atlasApi.getRecommendationsOptionalAuth({
+        budget_php: build.budgetPhp,
+        workload: value,
+        device_type: 'desktop',
+      });
+      build.updateRecommendedParts(recs?.parts || []);
+    } catch (e) {
+      setSyncError(e.message || 'Failed to fetch AI recommendations');
+    }
+    setSyncing(false);
+  };
+
+  const handleBudgetChange = async (value) => {
+    const numValue = Math.max(5000, Number(value || 0));
+    build.setBudgetPhp(numValue);
+    setSyncing(true);
+    setSyncError('');
+    try {
+      const recs = await atlasApi.getRecommendationsOptionalAuth({
+        budget_php: numValue,
+        workload: build.workload,
+        device_type: 'desktop',
+      });
+      build.updateRecommendedParts(recs?.parts || []);
+    } catch (e) {
+      setSyncError(e.message || 'Failed to fetch AI recommendations');
+    }
+    setSyncing(false);
+  };
+
   return (
     <aside className="sidebar">
-      <div className="logo">
-        <div className="title">ATLAS</div>
-        <div className="sub">PC BUILD SYSTEM</div>
-      </div>
-
-      <div className="planner-card">
-        <label className="planner-label" htmlFor="budget-input">
-          BUDGET (PHP)
-        </label>
-        <input
-          id="budget-input"
-          className="planner-input"
-          type="number"
-          min="5000"
-          step="500"
-          value={build.budgetPhp}
-          onChange={(event) => build.setBudgetPhp(Math.max(5000, Number(event.target.value || 0)))}
-        />
-
-        <label className="planner-label" htmlFor="workload-select" style={{ marginTop: 10 }}>
-          WORKLOAD
-        </label>
-        <select
-          id="workload-select"
-          className="planner-input"
-          value={build.workload}
-          onChange={(event) => build.setWorkload(event.target.value)}
-        >
-          <option value="gaming">Gaming</option>
-          <option value="editing">Editing</option>
-          <option value="general">General</option>
-          <option value="student">Student</option>
-        </select>
-
-        <div className="planner-meta">
-          <span>RECOMMENDER</span>
-          <strong>{build.recommendationSource.toUpperCase()}</strong>
+      <div className="logo logo-row">
+        <div>
+          <div className="title">ATLAS</div>
+          <div className="sub">PC BUILD SYSTEM</div>
         </div>
+        <Link to="/" className="builder-home-link">
+          Home
+        </Link>
       </div>
+
+      <details className="planner-card" open={controlsOpen} onToggle={(event) => setControlsOpen(event.currentTarget.open)}>
+        <summary className="planner-summary">
+          <span>Budget & workload</span>
+          <span>{controlsOpen ? '−' : '+'}</span>
+        </summary>
+
+        <div className="planner-card-body">
+          <div className="planner-field">
+            <label className="planner-label" htmlFor="budget-input">
+              Budget (PHP)
+            </label>
+            <input
+              id="budget-input"
+              className="planner-input"
+              type="number"
+              min="5000"
+              step="500"
+              value={build.budgetPhp}
+              onChange={(event) => handleBudgetChange(event.target.value)}
+            />
+          </div>
+
+          <div className="planner-field">
+            <label className="planner-label" htmlFor="workload-select">
+              Workload
+            </label>
+            <select
+              id="workload-select"
+              className="planner-input"
+              value={build.workload}
+              onChange={(event) => handleWorkloadChange(event.target.value)}
+            >
+              <option value="gaming">Gaming</option>
+              <option value="editing">Editing</option>
+              <option value="general">General</option>
+              <option value="student">Student</option>
+            </select>
+          </div>
+
+          <div className="planner-meta">
+            <span>RECOMMENDER</span>
+            <strong>{syncing ? 'SYNCING' : build.recommendationSource.toUpperCase()}</strong>
+          </div>
+          {syncError ? <div className="planner-error">{syncError}</div> : null}
+        </div>
+      </details>
 
       <div className="sidebar-actions">
-        <a href="/parts" className="sidebar-link sidebar-link-strong sidebar-link-block">
+        <Link to="/parts" className="sidebar-link sidebar-link-strong sidebar-link-block">
           View Parts
-        </a>
-      </div>
-
-      <div className="stepper" aria-label="Build progression">
-        {build.stageOrder.map((stage) => {
-          const section = sections.find((item) => item.key === stage);
-          const stateClass = section?.completed ? 'done' : section?.active ? 'active' : 'pending';
-          return (
-            <div key={stage} className={`step ${stateClass}`}>
-              <span className="step-dot" />
-              <span className="step-text">{stage}</span>
-            </div>
-          );
-        })}
+        </Link>
       </div>
 
       {sections.map((category, index) => (
@@ -112,15 +155,6 @@ export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
         />
       ))}
 
-      <div className="build-total">
-        <div className="label">BUILD TOTAL</div>
-        <div className="value">{formatCurrency(build.total)}</div>
-        <div className="budget-left">
-          Remaining: {formatCurrency(build.remainingBudget)}
-        </div>
-      </div>
-
-      <BuildSummary build={build} />
     </aside>
   );
 }
@@ -171,32 +205,34 @@ function CategoryGroup({ category, open, onToggle, completed, active, selectedPa
                   <span className="part-name">{part.kind || part.category}</span>
                   <span className="part-name">{formatSlotHint(part.slotHint)}</span>
                 </div>
-                <div className="qty-controls" role="group" aria-label={`${part.name} quantity controls`}>
-                  <button
-                    type="button"
-                    className="qty-btn"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDecrementPart(part);
-                    }}
-                    disabled={installedCount <= 0}
-                    aria-label={`Remove one ${part.name}`}
-                  >
-                    -
-                  </button>
-                  <span className="qty-value">{installedCount}</span>
-                  <button
-                    type="button"
-                    className="qty-btn"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onIncrementPart(part);
-                    }}
-                    aria-label={`Add one ${part.name}`}
-                  >
-                    +
-                  </button>
-                </div>
+                {QUANTITY_PART_KINDS.has(part.kind || part.category) ? (
+                  <div className="qty-controls" role="group" aria-label={`${part.name} quantity controls`}>
+                    <button
+                      type="button"
+                      className="qty-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDecrementPart(part);
+                      }}
+                      disabled={installedCount <= 0}
+                      aria-label={`Remove one ${part.name}`}
+                    >
+                      -
+                    </button>
+                    <span className="qty-value">{installedCount}</span>
+                    <button
+                      type="button"
+                      className="qty-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onIncrementPart(part);
+                      }}
+                      aria-label={`Add one ${part.name}`}
+                    >
+                      +
+                    </button>
+                  </div>
+                ) : null}
                 {targetLabel ? <div className="part-target">Target: {targetLabel}</div> : null}
               </div>
             );

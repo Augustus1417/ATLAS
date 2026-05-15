@@ -9,14 +9,15 @@ export default function BuilderPage() {
     <div className="builder-shell">
       <Sidebar sections={builder.sections} selectedPart={builder.selectedPart} onPickPart={builder.pickPart} build={builder} />
       <Viewport
+        sections={builder.sections}
         selectedSlot={builder.selectedSlot}
         pendingPart={builder.pendingPart}
         installedParts={builder.installedParts}
-        status={builder.status}
         onSelectSlot={builder.selectSlot}
         view={builder.view}
         selectedCase={builder.selectedCase}
         selectedMotherboard={builder.selectedMotherboard}
+        build={builder}
       />
     </div>
   );

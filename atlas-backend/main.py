@@ -1,16 +1,23 @@
 from contextlib import asynccontextmanager
+import logging
 
 import psycopg2
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from routers import builds, compatibility, components, pricing, recommendations, specs, users
 
 
 def ensure_roles_exist() -> None:
-    conn = psycopg2.connect(settings.database_url)
+    try:
+        conn = psycopg2.connect(settings.database_url)
+    except Exception as exc:
+        logging.warning("Could not connect to database during startup: %s", exc)
+        return
+
     try:
         cur = conn.cursor()
         cur.execute(
@@ -39,6 +46,17 @@ app = FastAPI(
     description="Automated Technology Lookup and Analysis Service backend",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

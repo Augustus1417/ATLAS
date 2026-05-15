@@ -14,9 +14,7 @@ const SLOT_CATEGORY_MAP = {
   sata1: 'Storage',
   psu_bay: 'PSU',
   fan_front1: 'Fans',
-  fan_front2: 'Fans',
   fan_top1: 'Fans',
-  fan_top2: 'Fans',
   fan_rear1: 'Fans',
 };
 

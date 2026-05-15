@@ -19,6 +19,21 @@ function namesLooselyMatch(a, b) {
   return left.includes(right) || right.includes(left);
 }
 
+const MOBO_MOUNTED_KINDS = new Set(['Motherboard', 'CPU', 'RAM', 'Storage', 'GPU']);
+
+function isMotherboardSlot(slotKey) {
+  if (!slotKey) return false;
+
+  return (
+    slotKey === 'mobo' ||
+    slotKey === 'cpu_socket' ||
+    slotKey.startsWith('ram') ||
+    slotKey.startsWith('m2') ||
+    slotKey === 'pcie1' ||
+    slotKey === 'sata1'
+  );
+}
+
 const SLOT_PRIORITY_BY_KIND = {
   RAM: ['ram1', 'ram2', 'ram3', 'ram4'],
   Storage: ['m2_1', 'm2_2', 'sata1'],
@@ -30,13 +45,6 @@ const SLOT_PRIORITY_BY_KIND = {
   Case: ['case_shell'],
 };
 
-const MOBO_MOUNTED_KINDS = new Set(['Motherboard', 'CPU', 'RAM', 'Storage', 'GPU']);
-
-function isMotherboardSlot(slotKey) {
-  if (!slotKey) return false;
-  return slotKey === 'mobo' || slotKey === 'cpu_socket' || slotKey.startsWith('ram') || slotKey.startsWith('m2') || slotKey === 'pcie1' || slotKey === 'sata1';
-}
-
 export default function useBuilderState() {
   const [budgetPhp, setBudgetPhp] = useState(defaultBudgetPhp);
   const [workload, setWorkload] = useState(workloadPresets[0]);
@@ -47,11 +55,10 @@ export default function useBuilderState() {
 
   const [selectedPart, setSelectedPart] = useState(null);
   const [pendingPart, setPendingPart] = useState(null);
-  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [selectedSlot, setSelectedSlot] = useState('case_shell');
   const [installedParts, setInstalledParts] = useState(initialInstalledParts);
-  const [status, setStatus] = useState('Set your budget, then pick a case to begin.');
+  const [status, setStatus] = useState('Select a case to begin.');
   const [view, setView] = useState('case');
-  const [graphicsMode, setGraphicsMode] = useState('stylized');
 
   const total = useMemo(() => sumInstalledParts(installedParts), [installedParts]);
   const remainingBudget = Math.max(0, budgetPhp - total);
@@ -284,6 +291,24 @@ export default function useBuilderState() {
     }
   }, [activeSectionKey, pendingPart, selectedPart, selectedSlot, selectedCase, view]);
 
+  function findFirstCompatibleSlot(part, primarySlot) {
+    const kind = part?.kind || part?.category;
+    const orderedSlots = [primarySlot, ...(SLOT_PRIORITY_BY_KIND[kind] || []), selectedSlot].filter(Boolean);
+    const uniqueSlots = [...new Set(orderedSlots)];
+
+    for (const slotKey of uniqueSlots) {
+      if (installedParts?.[slotKey]) {
+        continue;
+      }
+
+      if (canInstallPart(part, slotKey, { selectedCase, selectedMotherboard })) {
+        return slotKey;
+      }
+    }
+
+    return null;
+  }
+
   function resetDownstreamFromCase(nextCase) {
     setSelectedCase(nextCase);
     setSelectedMotherboard(null);
@@ -301,6 +326,7 @@ export default function useBuilderState() {
       mobo: board,
     }));
     setSelectedSlot('cpu_socket');
+    setView('mobo');
   }
 
   function commitInstall(part, slotKey) {
@@ -318,30 +344,9 @@ export default function useBuilderState() {
     }));
     setPendingPart(null);
     setSelectedSlot(slotKey);
+    setView('case');
     setStatus(`${part.name} installed in the selected slot.`);
     return true;
-  }
-
-  function findFirstCompatibleSlot(part, primarySlot) {
-    const kind = part?.kind || part?.category;
-    const orderedSlots = [
-      primarySlot,
-      ...(SLOT_PRIORITY_BY_KIND[kind] || []),
-      selectedSlot,
-    ].filter(Boolean);
-
-    const uniqueSlots = [...new Set(orderedSlots)];
-
-    for (const slotKey of uniqueSlots) {
-      if (installedParts?.[slotKey]) {
-        continue;
-      }
-      if (canInstallPart(part, slotKey, { selectedCase, selectedMotherboard })) {
-        return slotKey;
-      }
-    }
-
-    return null;
   }
 
   function pickPart(part) {
@@ -471,8 +476,6 @@ export default function useBuilderState() {
     status,
     view,
     setView,
-    graphicsMode,
-    setGraphicsMode,
     pickPart,
     incrementPart,
     decrementPart,

@@ -1,28 +1,15 @@
 :root {
   color-scheme: dark;
-  --bg: #0a0f1a;
-  --bg-gradient-start: #0a0f1a;
-  --bg-gradient-mid: #121828;
-  --bg-gradient-end: #0f1420;
-  --panel: #151f32;
-  --panel-2: #1a2740;
-  --panel-3: #1f2f4a;
-  --line: #2a3f5f;
-  --line-highlight: #3a5f8f;
-  --text: #e8f0ff;
-  --text-muted: #8a9fbf;
+  --bg: #101a2a;
+  --panel: #172438;
+  --panel-2: #1d2b42;
+  --line: #2e4668;
+  --text: #ecf4ff;
   --muted: #9ab2cf;
-  --accent: #7eb3ff;
-  --accent-glow: rgba(126, 179, 255, 0.3);
+  --accent: #26d0ff;
   --accent-2: #5fd39a;
-  --accent-2-glow: rgba(95, 211, 154, 0.3);
-  --warning: #ffb86b;
-  --error: #ff6b6b;
-  --success: #4ade80;
-}
-
-* {
-  box-sizing: border-box;
+  --glass: rgba(255,255,255,0.02);
+  --card-bg: rgba(19,24,30,0.6);
 }
 
 html,
@@ -35,14 +22,24 @@ body,
 
 body {
   background:
-    radial-gradient(ellipse at top, rgba(126, 179, 255, 0.15), transparent 50%),
-    radial-gradient(ellipse at bottom right, rgba(95, 211, 154, 0.08), transparent 50%),
-    linear-gradient(180deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 50%, var(--bg-gradient-end) 100%);
+    radial-gradient(circle at top, rgba(38, 208, 255, 0.06), transparent 28%),
+    linear-gradient(180deg, #08121a 0%, #0f1726 100%);
   color: var(--text);
-  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-  overflow: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Courier New', monospace;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+  background-size: 48px 48px, 48px 48px;
+  pointer-events: none;
+  z-index: 0;
 }
 
 button,
@@ -50,4 +47,24 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+.global-home-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1100;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(17, 27, 42, 0.9);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.global-home-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }

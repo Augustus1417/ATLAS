@@ -15,6 +15,10 @@ export default function BuildSummary({ build }) {
         <span>Total</span>
         <strong>{formatCurrency(build.total)}</strong>
       </div>
+      <div className="summary-row">
+        <span>Remaining</span>
+        <strong>{formatCurrency(build.remainingBudget)}</strong>
+      </div>
       {quantityRows.slice(0, 5).map(([name, count]) => (
         <div className="summary-row" key={name}>
           <span>{name}</span>

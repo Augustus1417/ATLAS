@@ -10,7 +10,7 @@ class UserRegisterRequest(BaseModel):
 
 
 class UserLoginRequest(BaseModel):
-    email: EmailStr
+    identifier: str = Field(min_length=3, max_length=128)
     password: str = Field(min_length=8, max_length=128)
 
 

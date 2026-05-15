@@ -1,17 +1,23 @@
 const API_BASE = 'http://localhost:8000';
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+  } catch (error) {
+    throw new Error(`Unable to reach the ATLAS backend at ${API_BASE}. Check that the API server is running and CORS is enabled.`);
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.message || 'Request failed');
+    const message = payload?.message || payload?.detail || 'Request failed';
+    throw new Error(message);
   }
 
   return payload.data;
@@ -19,7 +25,14 @@ async function request(path, options = {}) {
 
 export const atlasApi = {
   registerUser: (body) => request('/users/register', { method: 'POST', body: JSON.stringify(body) }),
-  loginUser: (body) => request('/users/login', { method: 'POST', body: JSON.stringify(body) }),
+  loginUser: async (body) => {
+    const data = await request('/users/login', { method: 'POST', body: JSON.stringify(body) });
+    // normalize to { access_token, user }
+    return {
+      access_token: data?.token?.access_token || data?.access_token,
+      user: data?.user || null,
+    };
+  },
   getMe: (token) => request('/users/me', { headers: { Authorization: `Bearer ${token}` } }),
   listComponents: (query = {}) => {
     const params = new URLSearchParams();

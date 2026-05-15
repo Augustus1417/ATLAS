@@ -1,22 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import PcSceneController from './scene/PcSceneController';
+import BuildSummary from './BuildSummary';
 import { formatCurrency } from './utils/priceMath';
 
 export default function Viewport({
+  sections,
   selectedSlot,
   pendingPart,
   installedParts,
-  status,
   onSelectSlot,
   view,
   selectedCase,
   selectedMotherboard,
+  build,
 }) {
   const canvasRef = useRef(null);
   const controllerRef = useRef(null);
   const handlersRef = useRef({ onSelectSlot });
-  const [hoverLabel, setHoverLabel] = useState('HOVER A SLOT');
-  const [hoverDesc, setHoverDesc] = useState('Move your mouse over any slot on the motherboard to inspect it.');
+  const [hoverLabel, setHoverLabel] = useState('');
+  const [hoverDesc, setHoverDesc] = useState('');
 
   useEffect(() => {
     handlersRef.current = { onSelectSlot };
@@ -26,8 +28,8 @@ export default function Viewport({
     () => ({
       onHoverSlot(slot) {
         if (!slot) {
-          setHoverLabel('HOVER A SLOT');
-          setHoverDesc('Move your mouse over any slot on the case or motherboard to inspect it.');
+          setHoverLabel('');
+          setHoverDesc('');
           return;
         }
         setHoverLabel(slot.label);
@@ -85,23 +87,31 @@ export default function Viewport({
     <main className="viewport">
       <canvas ref={canvasRef} />
 
-      <div className="status-pill">{status}</div>
-
-      <div className="slot-info">
-        <div className="slot-title">{hoverLabel}</div>
-        <div className="slot-desc">
-          {hoverDesc}
-          {pendingPart ? '\n\n→ Select a compatible slot to install this part.' : ''}
+      <aside className="builder-rail">
+        <div className="builder-checklist-card">
+          <div className="builder-checklist-title">CHECKLIST</div>
+          <div className="builder-checklist-list">
+            {sections.map((section) => (
+              <div key={section.key} className={section.completed ? 'check-item done' : section.active ? 'check-item active' : 'check-item'}>
+                <span className="check-dot" />
+                <span className="check-label">{section.key}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="hud">
-        CASE: {selectedCase?.name || 'none'}
-        <br />
-        MOBO: {selectedMotherboard?.name || 'none'}
-        <br />
-        PENDING: {pendingPart ? `${pendingPart.name} (${formatCurrency(pendingPart.price)})` : 'none'}
-      </div>
+        <BuildSummary build={build} />
+      </aside>
+
+      {hoverLabel ? (
+        <div className="slot-info is-active">
+          <div className="slot-title">{hoverLabel}</div>
+          <div className="slot-desc">
+            {hoverDesc}
+            {pendingPart ? '\n\n→ Select a compatible slot to install this part.' : ''}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
