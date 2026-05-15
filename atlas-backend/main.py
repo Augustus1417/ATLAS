@@ -67,6 +67,12 @@ async def http_exception_handler(_request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_request: Request, exc: RequestValidationError):
+    # Log raw request body to help debug JSON decode / validation issues from the frontend.
+    try:
+        body = await _request.body()
+        logging.warning("Request validation error. Raw body: %s", body.decode(errors="replace"))
+    except Exception:
+        logging.warning("Request validation error but failed to read raw body")
     return JSONResponse(status_code=422, content={"data": exc.errors(), "message": "Validation error"})
 
 
