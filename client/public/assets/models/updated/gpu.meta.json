@@ -1,0 +1,8 @@
+{
+  "name": "gpu",
+  "description": "Mock GPU 3-fan",
+  "length_mm": 310,
+  "snap_points": [ { "name": "pcie_bracket", "position": [0, 132, -60], "required": true } ],
+  "tdp": 220,
+  "tri_count": 5400
+}

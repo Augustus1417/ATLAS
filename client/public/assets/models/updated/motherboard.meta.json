@@ -1,0 +1,14 @@
+{
+  "name": "motherboard",
+  "description": "ATX motherboard mock",
+  "socket": "AM5",
+  "ram_type": "DDR5",
+  "bbox_mm": [244, 305, 2],
+  "pivot_mm": [0, 0, 0],
+  "snap_points": [
+    { "name": "cpu_socket", "position": [0, 132, 20], "required": true },
+    { "name": "pcie_slot_1", "position": [0, 132, -60], "required": false },
+    { "name": "m.2_slot_1", "position": [40, 132, 10], "required": false }
+  ],
+  "tri_count": 3200
+}
