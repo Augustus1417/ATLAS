@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from database import dict_cursor, get_db_connection
+from database import dict_cursor, get_db_connection, is_sqlite_connection
 from dependencies import get_current_user
 from models.user import TokenResponse, UserLoginRequest, UserPublic, UserRegisterRequest
 from utils.responses import ok
@@ -23,15 +23,35 @@ def register_user(payload: UserRegisterRequest, conn=Depends(get_db_connection))
     password_hash = hash_password(payload.password)
 
     try:
-        cur.execute(
-            """
-            INSERT INTO users (role_id, username, email, password_hash, is_active)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING user_id, role_id, username, email, is_active, created_at
-            """,
-            (role["role_id"], payload.username, payload.email, password_hash, True),
-        )
-        user = cur.fetchone()
+        if is_sqlite_connection(conn):
+            cur.execute(
+                """
+                INSERT INTO users (role_id, username, email, password_hash, is_active)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (role["role_id"], payload.username, payload.email, password_hash, 1),
+            )
+            cur.execute("SELECT last_insert_rowid() AS user_id")
+            user_id_row = cur.fetchone()
+            cur.execute(
+                """
+                SELECT user_id, role_id, username, email, is_active, created_at
+                FROM users
+                WHERE user_id = %s
+                """,
+                (user_id_row["user_id"],),
+            )
+            user = cur.fetchone()
+        else:
+            cur.execute(
+                """
+                INSERT INTO users (role_id, username, email, password_hash, is_active)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING user_id, role_id, username, email, is_active, created_at
+                """,
+                (role["role_id"], payload.username, payload.email, password_hash, True),
+            )
+            user = cur.fetchone()
         conn.commit()
     except Exception as exc:  # noqa: BLE001
         conn.rollback()
