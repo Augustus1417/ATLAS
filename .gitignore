@@ -1,1 +1,14 @@
 .venv/
+# Node modules
+client/node_modules/
+**/node_modules/
+
+# Lockfiles
+client/package-lock.json
+
+# Environment
+.env
+example.env
+
+# OS
+.DS_Store
