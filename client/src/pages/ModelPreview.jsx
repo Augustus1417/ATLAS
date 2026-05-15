@@ -1,12 +1,17 @@
 import React, { useRef, useEffect, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { evaluateBuild, estimatePrice } from '../utils/compatibility'
+import PerformanceHUD from '../components/PerformanceHUD'
 
 export default function ModelPreview() {
   const mountRef = useRef(null)
   const [components, setComponents] = useState([])
   const [selected, setSelected] = useState(null)
   const [powerOn, setPowerOn] = useState(false)
+  const [buildMeta, setBuildMeta] = useState({})
+  const [compat, setCompat] = useState({ ok: true, issues: [], totalTdp: 0 })
+  const [perfStats, setPerfStats] = useState({ cpu: 0, gpu: 0, ram: 10, mode: 'IDLE' })
 
   useEffect(() => {
     // load mock metadata files
@@ -152,12 +157,28 @@ export default function ModelPreview() {
         // register fans to animate
         mesh.traverse((n) => { if (n.name && n.name.startsWith('gpu_fan')) fanNodes.push(n) })
         placed[name] = mesh
+        // update meta registry
+        try {
+          fetch(`/assets/models/updated/${name}.meta.json`).then((r)=>r.json()).then((m)=>{
+            const bm = {...mount.__buildMeta, [name]: m}
+            mount.__buildMeta = bm
+            setBuildMeta(bm)
+            const res = evaluateBuild(bm)
+            setCompat(res)
+          }).catch(()=>{})
+        } catch(e){}
       },
       remove: (name) => {
         const m = placed[name]
         if (m) {
           scene.remove(m)
           delete placed[name]
+          const bm = {...mount.__buildMeta}
+          delete bm[name]
+          mount.__buildMeta = bm
+          setBuildMeta(bm)
+          const res = evaluateBuild(bm)
+          setCompat(res)
         }
       }
     }
@@ -199,8 +220,19 @@ export default function ModelPreview() {
 
   const handlePowerOn = () => {
     setPowerOn(true)
-    // simple timed POST -> show performance HUD
-    setTimeout(() => setPowerOn(false), 10000)
+    // set performance mode and animate stats
+    setPerfStats({ cpu: 5, gpu: 5, ram: 15, mode: 'IDLE' })
+    let phase = 0
+    const phases = ['IDLE','GAMING','RENDER','AI/ML']
+    const interval = setInterval(()=>{
+      phase = (phase+1) % phases.length
+      const mode = phases[phase]
+      if (mode === 'IDLE') setPerfStats({ cpu: 5, gpu: 5, ram: 12, mode })
+      if (mode === 'GAMING') setPerfStats({ cpu: 68, gpu: 95, ram: 64, mode })
+      if (mode === 'RENDER') setPerfStats({ cpu: 98, gpu: 40, ram: 84, mode })
+      if (mode === 'AI/ML') setPerfStats({ cpu: 92, gpu: 96, ram: 74, mode })
+    }, 3000)
+    setTimeout(()=>{ clearInterval(interval); setPowerOn(false); setPerfStats({ cpu: 0, gpu: 0, ram: 10, mode: 'IDLE' }) }, 16000)
   }
 
   return (
@@ -243,6 +275,17 @@ export default function ModelPreview() {
             </div>
           </div>
         ) : null}
+
+        <div style={{ position: 'absolute', right: 12, top: 72 }}>
+          <div style={{ padding: 8, background: 'rgba(0,0,0,0.5)', color: '#dff', borderRadius: 6 }}>
+            <div><strong>Total TDP:</strong> {compat.totalTdp} W</div>
+            <div><strong>Price:</strong> ${estimatePrice(buildMeta)}</div>
+            <div style={{ color: compat.ok ? '#7ef' : '#f66' }}>{compat.ok ? 'Compatible' : `${compat.issues.length} issues`}</div>
+            {!compat.ok && compat.issues.map((it, idx)=>(<div key={idx} style={{ fontSize: 12, color: '#f88' }}>• {it.message}</div>))}
+          </div>
+        </div>
+
+        <PerformanceHUD stats={perfStats} />
       </div>
     </div>
   )

@@ -1,0 +1,10 @@
+const { evaluateBuild } = require('../src/utils/compatibility')
+const fs = require('fs')
+const path = require('path')
+const modelsDir = path.join(__dirname,'..','public','assets','models','updated')
+const m = JSON.parse(fs.readFileSync(path.join(modelsDir,'motherboard.meta.json')))
+const c = JSON.parse(fs.readFileSync(path.join(modelsDir,'cpu.meta.json')))
+const g = JSON.parse(fs.readFileSync(path.join(modelsDir,'gpu.meta.json')))
+const psu = { name: 'psu', watt: 450 }
+const res = evaluateBuild({ motherboard: m, cpu: c, gpu: g, psu })
+console.log('Compatibility:', res)
