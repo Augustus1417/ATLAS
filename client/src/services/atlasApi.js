@@ -11,7 +11,8 @@ async function request(path, options = {}) {
       ...options,
     });
   } catch (error) {
-    throw new Error(`Unable to reach the ATLAS backend at ${API_BASE}. Check that the API server is running and CORS is enabled.`);
+    console.error('Network error when calling ATLAS backend:', error);
+    throw new Error(`Unable to reach the ATLAS backend at ${API_BASE}. Check that the API server is running and CORS is enabled. (${error.message})`);
   }
 
   const payload = await response.json().catch(() => ({}));
