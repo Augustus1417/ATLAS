@@ -7,6 +7,8 @@ import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import CoreModule from './pages/CoreModule';
 import ModelPreview from './pages/ModelPreview';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import './styles/home.css';
 import './styles/wizard.css';
 import './styles/parts-db.css';
@@ -18,16 +20,29 @@ function AppRoutes() {
   const authMode = queryParams.get('mode') || 'login';
   return (
     <>
-
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/builder" element={<BuilderPage />} />
-        <Route path="/core" element={<CoreModule />} />
+        <Route path="/auth" element={<AuthPage mode={authMode} />} />
         <Route path="/wizard" element={<AIWizard />} />
         <Route path="/parts" element={<PartsDatabase />} />
-        <Route path="/auth" element={<AuthPage mode={authMode} />} />
-        <Route path="/model-preview" element={<ModelPreview />} />
+        
+        {/* Protected Routes */}
+        <Route 
+          path="/dashboard" 
+          element={<ProtectedRoute><Dashboard /></ProtectedRoute>} 
+        />
+        <Route 
+          path="/builder" 
+          element={<ProtectedRoute><BuilderPage /></ProtectedRoute>} 
+        />
+        <Route 
+          path="/core" 
+          element={<ProtectedRoute><CoreModule /></ProtectedRoute>} 
+        />
+        <Route 
+          path="/model-preview" 
+          element={<ProtectedRoute><ModelPreview /></ProtectedRoute>} 
+        />
       </Routes>
     </>
   );
@@ -36,7 +51,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <Router>
-      <AppRoutes />
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </Router>
   );
 }

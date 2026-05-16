@@ -1,7 +1,52 @@
-.builder-shell {
+.builder-container {
   display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+}
+
+.builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+  z-index: 10;
+}
+
+.builder-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.builder-back-btn,
+.builder-parts-btn {
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.builder-back-btn:hover,
+.builder-parts-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.builder-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   overflow: hidden;
 }
 
@@ -742,94 +787,94 @@ select.planner-input {
 }
 
 /* POWER PERFORMANCE PANEL STYLES */
-.power-performance-panel {
+.power-panel {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 180px;
+  max-height: 200px;
   background: linear-gradient(180deg, rgba(15, 25, 40, 0.95) 0%, rgba(10, 15, 25, 0.98) 100%);
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  z-index: 10;
-}
-
-.power-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(42, 63, 95, 0.2);
+  gap: 8px;
+  overflow-y: auto;
+  z-index: 10;
+  font-size: 12px;
 }
 
-.power-controls button {
-  background: rgba(30, 50, 78, 0.6);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.power-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.stat-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.power-controls button:hover:not(:disabled) {
-  background: rgba(40, 60, 88, 0.7);
-  border-color: var(--accent);
-  color: var(--accent-2);
-  box-shadow: 0 0 12px rgba(126, 179, 255, 0.15);
+.stat-label {
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
-.power-controls button.power-on {
-  background: rgba(46, 125, 50, 0.6);
-  border-color: rgba(95, 211, 154, 0.5);
-  color: #a8e6cf;
+.stat-value {
+  color: var(--accent);
+  font-weight: 600;
+  font-family: 'Monaco', 'Menlo', monospace;
 }
 
-.power-controls button.power-on:hover {
-  background: rgba(56, 135, 60, 0.7);
-  border-color: rgba(95, 211, 154, 0.7);
-  box-shadow: 0 0 16px rgba(95, 211, 154, 0.2);
+.compat-warnings {
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: rgba(255, 193, 7, 0.05);
 }
 
-.power-controls button.power-off {
-  background: rgba(125, 46, 50, 0.6);
-  border-color: rgba(211, 95, 100, 0.5);
-  color: #f4a7a9;
+.compat-warnings h3 {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  color: #ffc107;
 }
 
-.power-controls button.power-off:hover {
-  background: rgba(135, 56, 60, 0.7);
-  border-color: rgba(211, 95, 100, 0.7);
-  box-shadow: 0 0 16px rgba(211, 95, 100, 0.2);
-}
-
-.power-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.compat-warnings ul {
+  margin: 0;
+  padding-left: 16px;
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.power-stats {
-  display: flex;
-  gap: 16px;
+.compat-errors {
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: rgba(244, 67, 54, 0.05);
 }
 
-.power-disabled {
-  padding: 16px;
-  text-align: center;
+.compat-errors h3 {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  color: #f44336;
+}
+
+.compat-errors ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
   color: var(--text-muted);
-  font-size: 14px;
-  font-style: italic;
+}
+
+.build-complete-msg {
+  padding: 8px 12px;
+  background: rgba(95, 211, 154, 0.1);
+  border: 1px solid rgba(95, 211, 154, 0.3);
+  border-radius: 4px;
+  color: #a8e6cf;
+  font-weight: 500;
+  text-align: center;
+  font-size: 12px;
 }
 
 /* Compatibility messages */

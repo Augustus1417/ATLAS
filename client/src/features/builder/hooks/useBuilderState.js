@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { atlasApi } from '../../../services/atlasApi';
 import { defaultBudgetPhp, initialInstalledParts, mockCatalog, stageOrder, workloadPresets } from '../../../data/mockParts';
 import { canInstallPart, checkCompatibility, calculateSystemPowerConsumption, getPSUWattage } from '../utils/compatibility';
 import { sumInstalledParts } from '../utils/priceMath';
+import { createAutoSelectHelper } from '../utils/autoSelectHelper';
 
 function normalizeName(value) {
   return String(value || '')
@@ -46,6 +48,7 @@ const SLOT_PRIORITY_BY_KIND = {
 };
 
 export default function useBuilderState() {
+  const location = useLocation();
   const [budgetPhp, setBudgetPhp] = useState(defaultBudgetPhp);
   const [workload, setWorkload] = useState(workloadPresets[0]);
   const [selectedCase, setSelectedCase] = useState(null);
@@ -472,6 +475,91 @@ export default function useBuilderState() {
     return true;
   }
 
+  // Apply recommendations from AI wizard to the builder
+  function applyRecommendations(recommendedParts) {
+    if (!recommendedParts || !Array.isArray(recommendedParts)) {
+      setStatus('No recommendations to apply.');
+      return;
+    }
+
+    console.log('Applying recommendations:', recommendedParts);
+
+    const recs = recommendedParts;
+    const helper = createAutoSelectHelper(mockCatalog);
+    const recsByCategory = helper.getRecommendationsByCategory(recs);
+    
+    console.log('Recommendations by category:', recsByCategory);
+
+    // First, select the case
+    const caseRec = recsByCategory['Case']?.[0] || recsByCategory['case']?.[0];
+    if (caseRec) {
+      const catalogCases = mockCatalog.cases || [];
+      const matchedCase = helper.findBestMatch(catalogCases, caseRec);
+      if (matchedCase) {
+        console.log('Setting case:', matchedCase);
+        resetDownstreamFromCase(matchedCase);
+        // Store for next effect to handle motherboard + other parts
+        window.__pendingAutoSelect = recs;
+      }
+    }
+
+    setStatus('Applying recommendations...');
+  }
+
+  function updateRecommendedParts(parts) {
+    setBackendRecommendations(parts || []);
+    setRecommendationSource(parts && parts.length ? 'backend' : 'local');
+  }
+
+  // Auto-select recommended parts after case and motherboard are set
+  useEffect(() => {
+    if (!window.__pendingAutoSelect) return;
+    if (!selectedCase) return;
+
+    const recs = window.__pendingAutoSelect;
+    const helper = createAutoSelectHelper(mockCatalog);
+    const recsByCategory = helper.getRecommendationsByCategory(recs);
+    
+    // If we need to set motherboard, do that first
+    if (!selectedMotherboard) {
+      const moboRec = recsByCategory['Motherboard']?.[0] || recsByCategory['motherboard']?.[0];
+      if (moboRec) {
+        const compatMobos = mockCatalog.motherboards.filter(
+          b => selectedCase.supportedFormFactors.includes(b.formFactor)
+        ) || [];
+        const matchedMobo = helper.findBestMatch(compatMobos, moboRec);
+        if (matchedMobo) {
+          console.log('Setting motherboard:', matchedMobo);
+          resetDownstreamFromMotherboard(matchedMobo);
+          // Keep pending for next effect cycle
+          return;
+        }
+      }
+    }
+
+    // Now we have case and mobo, auto-select other parts
+    if (selectedCase && selectedMotherboard) {
+      console.log('Auto-selecting other parts...');
+      const results = helper.selectRecommendedParts(recsByCategory, pickPart);
+      console.log('Auto-selection results:', results);
+      
+      delete window.__pendingAutoSelect;
+      setStatus(
+        results.successful.length > 0
+          ? `Auto-selected ${results.successful.length} recommended parts. Continue building!`
+          : 'Recommendations applied. Start building!'
+      );
+    }
+  }, [selectedCase, selectedMotherboard]);
+
+  // Load recommendations from wizard route state
+  useEffect(() => {
+    if (location.state?.recommendations) {
+      console.log('Loading recommendations from route state:', location.state.recommendations);
+      applyRecommendations(location.state.recommendations);
+    }
+  }, []);
+
   return {
     stageOrder,
     sections: sectionsWithStatus,
@@ -499,6 +587,8 @@ export default function useBuilderState() {
     decrementPart,
     selectSlot,
     installSelected,
+    applyRecommendations,
+    updateRecommendedParts,
     // Enhanced compatibility and power metrics
     compatibility: { errors, warnings, info },
     powerDraw,

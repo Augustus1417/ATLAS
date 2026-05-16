@@ -11,21 +11,34 @@ export default function PartsDatabase() {
   const [budget, setBudget] = useState('');
   const [currentSpecs, setCurrentSpecs] = useState({ cpu: '', gpu: '', ram: '', storage: '' });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     async function fetchParts() {
       try {
-        const res = await atlasApi.listComponents();
-        setParts(res);
-        console.log('fetched parts', res);
+        setLoading(true);
+        setError('');
+        
+        // Use the robust builder API that has fallback support
+        const res = await atlasApi.getPartsFlat();
+        
+        if (res && Array.isArray(res)) {
+          setParts(res);
+          console.log('Fetched parts from API:', res.length, 'parts');
+        } else {
+          setError('No parts returned from API');
+          setParts([]);
+        }
       } catch (e) {
-        console.error('Failed to fetch parts database', e);
+        console.error('Failed to fetch parts database:', e);
+        setError(`Failed to load parts: ${e.message}`);
+        setParts([]);
       } finally {
         setLoading(false);
       }
     }
     fetchParts();
-  }, [navigate]);
+  }, []);
 
   // Helper to require auth for actions that need it (builder, dashboard)
   function requireAuth(target) {
@@ -196,6 +209,11 @@ export default function PartsDatabase() {
         <main className="parts-grid-wrap">
           {loading ? (
             <div className="db-loading">Loading Hardware...</div>
+          ) : error ? (
+            <div className="db-error" style={{ padding: '20px', background: '#fee', color: '#c00', borderRadius: '4px', margin: '20px' }}>
+              <strong>Error loading parts:</strong> {error}
+              <p style={{ fontSize: '0.9em', marginTop: '10px' }}>The parts database may be temporarily unavailable. Try refreshing the page.</p>
+            </div>
           ) : (
             <>
               <div className="parts-grid-header">

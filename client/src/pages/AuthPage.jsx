@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { atlasApi } from '../services/atlasApi';
+import { useAuth } from '../context/AuthContext';
 import '../styles/auth.css';
 
 export default function AuthPage({ mode = 'login', onSuccess }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login, register, loading: authLoading, error: authError } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -27,12 +28,15 @@ export default function AuthPage({ mode = 'login', onSuccess }) {
     setLoading(true);
     try {
       if (mode === 'login') {
-        const data = await atlasApi.loginUser({ identifier: formData.identifier, password: formData.password });
-        const token = data?.access_token || '';
-        if (!token) throw new Error('No access token returned from server');
-        window.localStorage.setItem('atlas_token', token);
+        const result = await login(formData.identifier, formData.password);
+        if (!result.success) {
+          throw new Error(result.error);
+        }
       } else {
-        await atlasApi.registerUser({ username: formData.username, email: formData.email, password: formData.password });
+        const result = await register(formData.username, formData.email, formData.password);
+        if (!result.success) {
+          throw new Error(result.error);
+        }
         navigate('/auth?mode=login');
         return;
       }
@@ -150,10 +154,10 @@ export default function AuthPage({ mode = 'login', onSuccess }) {
               </div>
             </div>
 
-            {error ? <div className="auth-error">{error}</div> : null}
+            {error || authError ? <div className="auth-error">{error || authError}</div> : null}
 
-            <button type="submit" className="btn-authorize" disabled={loading}>
-              {loading ? (mode === 'login' ? 'LOGGING IN...' : 'CREATING...') : mode === 'login' ? 'LOG IN' : 'CREATE ACCOUNT'}
+            <button type="submit" className="btn-authorize" disabled={loading || authLoading}>
+              {loading || authLoading ? (mode === 'login' ? 'LOGGING IN...' : 'CREATING...') : mode === 'login' ? 'LOG IN' : 'CREATE ACCOUNT'}
             </button>
           </form>
         </div>

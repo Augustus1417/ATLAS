@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { atlasApi } from '../../services/atlasApi';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency } from './utils/priceMath';
 
 const QUANTITY_PART_KINDS = new Set(['RAM', 'Storage', 'Fans']);
@@ -30,6 +31,7 @@ function formatSlotHint(slotHint) {
 }
 
 export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
+  const { token, user, logout } = useAuth();
   const [openKey, setOpenKey] = useState(build.activeSectionKey);
   const [syncError, setSyncError] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -39,16 +41,21 @@ export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
     setOpenKey(build.activeSectionKey);
   }, [build.activeSectionKey]);
 
+  const handleLogout = () => {
+    logout();
+    window.location.href = '/';
+  };
+
   const handleWorkloadChange = async (value) => {
     build.setWorkload(value);
     setSyncing(true);
     setSyncError('');
     try {
-      const recs = await atlasApi.getRecommendationsOptionalAuth({
+      const recs = await atlasApi.getRecommendations({
         budget_php: build.budgetPhp,
         workload: value,
         device_type: 'desktop',
-      });
+      }, token);
       build.updateRecommendedParts(recs?.parts || []);
     } catch (e) {
       setSyncError(e.message || 'Failed to fetch AI recommendations');
@@ -62,11 +69,11 @@ export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
     setSyncing(true);
     setSyncError('');
     try {
-      const recs = await atlasApi.getRecommendationsOptionalAuth({
+      const recs = await atlasApi.getRecommendations({
         budget_php: numValue,
         workload: build.workload,
         device_type: 'desktop',
-      });
+      }, token);
       build.updateRecommendedParts(recs?.parts || []);
     } catch (e) {
       setSyncError(e.message || 'Failed to fetch AI recommendations');
@@ -80,10 +87,27 @@ export default function Sidebar({ sections, selectedPart, onPickPart, build }) {
         <div>
           <div className="title">ATLAS</div>
           <div className="sub">PC BUILD SYSTEM</div>
+          {user && <div className="user-info" style={{ fontSize: '11px', marginTop: '4px', opacity: 0.7 }}>User: {user.username}</div>}
         </div>
-        <Link to="/" className="builder-home-link">
-          Home
-        </Link>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+          <Link to="/" className="builder-home-link">
+            Home
+          </Link>
+          <button 
+            onClick={handleLogout} 
+            style={{
+              padding: '4px 8px',
+              fontSize: '11px',
+              background: '#cc3333',
+              border: 'none',
+              color: '#fff',
+              cursor: 'pointer',
+              borderRadius: '2px'
+            }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       <details className="planner-card" open={controlsOpen} onToggle={(event) => setControlsOpen(event.currentTarget.open)}>
