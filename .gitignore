@@ -12,3 +12,4 @@ example.env
 
 # OS
 .DS_Store
+backups/
