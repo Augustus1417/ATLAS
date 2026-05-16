@@ -38,9 +38,11 @@ export const atlasApi = {
   listComponents: (query = {}) => {
     const params = new URLSearchParams();
     Object.entries(query).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        params.set(key, String(value));
-      }
+        if (value !== undefined && value !== null && value !== '') {
+          // Don't send a catch-all 'All' category filter to the API — it should mean no filter.
+          if (key === 'category' && String(value).toLowerCase() === 'all') return;
+          params.set(key, String(value));
+        }
     });
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return request(`/components${suffix}`);

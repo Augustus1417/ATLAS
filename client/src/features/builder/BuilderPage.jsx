@@ -1,6 +1,7 @@
 import Sidebar from './Sidebar';
 import Viewport from './Viewport';
 import useBuilderState from './hooks/useBuilderState';
+import PowerPerformancePanel from './PowerPerformancePanel';
 
 export default function BuilderPage() {
   const builder = useBuilderState();
@@ -18,6 +19,13 @@ export default function BuilderPage() {
         selectedCase={builder.selectedCase}
         selectedMotherboard={builder.selectedMotherboard}
         build={builder}
+      />
+      <PowerPerformancePanel
+        build={builder}
+        compatibility={builder.compatibility}
+        powerDraw={builder.powerDraw}
+        psuWattage={builder.psuWattage}
+        powerUsagePercentage={builder.powerUsagePercentage}
       />
     </div>
   );

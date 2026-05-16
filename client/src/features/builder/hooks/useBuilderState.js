@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { atlasApi } from '../../../services/atlasApi';
 import { defaultBudgetPhp, initialInstalledParts, mockCatalog, stageOrder, workloadPresets } from '../../../data/mockParts';
-import { canInstallPart } from '../utils/compatibility';
+import { canInstallPart, checkCompatibility, calculateSystemPowerConsumption, getPSUWattage } from '../utils/compatibility';
 import { sumInstalledParts } from '../utils/priceMath';
 
 function normalizeName(value) {
@@ -106,6 +106,24 @@ export default function useBuilderState() {
     }
     return stageOrder[stageOrder.length - 1];
   }, [completion]);
+
+  // Enhanced compatibility checking
+  const { errors, warnings, info } = useMemo(() => {
+    return checkCompatibility(installedParts, { selectedCase, selectedMotherboard });
+  }, [installedParts, selectedCase, selectedMotherboard]);
+
+  const powerDraw = useMemo(() => {
+    return calculateSystemPowerConsumption(installedParts);
+  }, [installedParts]);
+
+  const psuWattage = useMemo(() => {
+    return getPSUWattage(installedParts);
+  }, [installedParts]);
+
+  const powerUsagePercentage = useMemo(() => {
+    if (psuWattage === 0) return 0;
+    return Math.min(100, (powerDraw / psuWattage) * 100);
+  }, [powerDraw, psuWattage]);
 
   function markRecommended(parts, categoryKey) {
     if (recommendationSource !== 'backend') {
@@ -232,7 +250,7 @@ export default function useBuilderState() {
           active: activeSection,
         };
       }),
-    [activeSectionKey, completion, guidedSections],
+    [activeSectionKey, completion, guidedSections]
   );
 
   useEffect(() => {
@@ -395,7 +413,7 @@ export default function useBuilderState() {
     setStatus(
       canInstallPart(pendingPart, slotKey, { selectedCase, selectedMotherboard })
         ? `Slot selected and ready for ${pendingPart.name}.`
-        : `Slot selected, but ${pendingPart.name} may not fit here.`,
+        : `Slot selected, but ${pendingPart.name} may not fit here.`
     );
   }
 
@@ -481,5 +499,10 @@ export default function useBuilderState() {
     decrementPart,
     selectSlot,
     installSelected,
+    // Enhanced compatibility and power metrics
+    compatibility: { errors, warnings, info },
+    powerDraw,
+    psuWattage,
+    powerUsagePercentage
   };
 }

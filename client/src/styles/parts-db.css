@@ -43,6 +43,18 @@
   flex-wrap: wrap;
 }
 
+/* Responsive navigation scaling: reduce button/text sizes on smaller screens */
+.parts-hero-actions,
+.parts-toolbar {
+  font-size: 1rem;
+}
+
+.parts-primary,
+.parts-secondary,
+.db-btn {
+  font-size: 0.95rem;
+}
+
 .parts-primary,
 .parts-secondary,
 .db-btn {
@@ -67,8 +79,10 @@
 
 .parts-toolbar {
   display: grid;
+  grid-template-columns: 1fr 160px 140px;
   gap: 14px;
   margin-bottom: 18px;
+  align-items: center;
 }
 
 .parts-search-wrap {
@@ -92,10 +106,55 @@
   border-radius: 10px;
 }
 
+/* Ensure selects/inputs don't overflow their containers */
+.parts-search[type="text"],
+.parts-search[type="number"],
+.parts-search,
+.parts-search-wrap select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Styled select dropdown for dark theme */
+.parts-search-wrap {
+  position: relative;
+}
+
+.parts-search-wrap select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: rgba(17, 27, 42, 0.9);
+  color: var(--text);
+  padding-right: 38px;
+  border-radius: 10px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path fill='%23cfeeff' d='M0 0 L5 6 L10 0 Z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.parts-search-wrap select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(38,208,255,0.08);
+}
+
+.parts-search-wrap select option {
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* Hide default arrow in IE/Edge */
+.parts-search-wrap select::-ms-expand {
+  display: none;
+}
+
 .parts-chip-row {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  grid-column: 1 / -1;
+  margin-top: 8px;
 }
 
 .parts-chip {
@@ -116,6 +175,10 @@
 .parts-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "aside toolbar"
+    "aside main";
   gap: 18px;
   align-items: start;
 }
@@ -123,6 +186,40 @@
 .parts-side-panel {
   display: grid;
   gap: 14px;
+  grid-area: aside;
+}
+
+.parts-toolbar {
+  grid-area: toolbar;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.parts-toolbar .parts-search-wrap {
+  min-width: 0;
+}
+
+.parts-toolbar .parts-search-wrap:first-child {
+  flex: 1 1 360px;
+  min-width: 220px;
+}
+
+.parts-toolbar .parts-search-wrap:nth-child(2) {
+  flex: 0 0 160px;
+}
+
+.parts-toolbar .parts-search-wrap:nth-child(3) {
+  flex: 0 0 140px;
+}
+
+.parts-search {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.parts-grid-wrap {
+  grid-area: main;
 }
 
 .parts-compare-card {
@@ -140,6 +237,42 @@
 .parts-panel-card h2,
 .parts-panel-card h3 {
   margin: 0 0 10px;
+}
+
+.parts-quickfacts {
+  padding: 12px;
+}
+
+.parts-quickfacts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.parts-quickfacts-header h3 {
+  margin: 0;
+}
+
+.parts-toggle {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  font-size: 1.2rem;
+}
+
+.parts-quickfacts-body ul {
+  list-style: none;
+  padding: 8px 0 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.parts-quickfacts-body li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .parts-panel-card p {
@@ -172,6 +305,8 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 11px 12px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .parts-panel-actions {
@@ -352,6 +487,18 @@
   .parts-hero {
     gap: 16px;
   }
+
+  .parts-hero-actions,
+  .parts-toolbar {
+    font-size: 0.9rem;
+  }
+
+  .parts-primary,
+  .parts-secondary,
+  .db-btn {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
 }
 
 @media (max-width: 640px) {
@@ -367,5 +514,53 @@
   .parts-grid-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .parts-hero-actions,
+  .parts-toolbar {
+    font-size: 0.82rem;
+  }
+
+  .parts-primary,
+  .parts-secondary,
+  .db-btn {
+    padding: 8px 10px;
+    font-size: 0.82rem;
+  }
+}
+
+/* Extra-small screens: stack hero and shrink heading/actions */
+@media (max-width: 480px) {
+  .parts-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .parts-kicker {
+    font-size: 0.62rem;
+  }
+
+  .parts-hero h1 {
+    font-size: clamp(1.25rem, 7vw, 1.9rem);
+    line-height: 1.15;
+  }
+
+  .parts-hero-actions {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .parts-hero-actions a,
+  .parts-hero-actions button {
+    padding: 8px 10px;
+    font-size: 0.78rem;
+  }
+
+  .parts-hero-actions .parts-primary {
+    margin-left: 0;
   }
 }

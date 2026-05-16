@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { atlasApi } from '../services/atlasApi';
 import '../styles/parts-db.css';
 
@@ -13,16 +13,11 @@ export default function PartsDatabase() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = window.localStorage.getItem('atlas_token');
-    if (!token) {
-      navigate('/auth?mode=login&next=/parts', { replace: true });
-      return undefined;
-    }
-
     async function fetchParts() {
       try {
         const res = await atlasApi.listComponents();
         setParts(res);
+        console.log('fetched parts', res);
       } catch (e) {
         console.error('Failed to fetch parts database', e);
       } finally {
@@ -32,7 +27,19 @@ export default function PartsDatabase() {
     fetchParts();
   }, [navigate]);
 
-  const categories = useMemo(() => ['All', ...new Set(parts.map((part) => part.category))], [parts]);
+  // Helper to require auth for actions that need it (builder, dashboard)
+  function requireAuth(target) {
+    const token = window.localStorage.getItem('atlas_token');
+    if (!token) {
+      navigate(`/auth?mode=login&next=${encodeURIComponent(target)}`, { replace: true });
+      return false;
+    }
+    navigate(target);
+    return true;
+  }
+
+  const availableCategories = useMemo(() => [...new Set(parts.map((part) => part.category).filter(Boolean))], [parts]);
+  const CATEGORY_OPTIONS = ['All', 'CPU', 'GPU', 'Motherboard', 'RAM', 'Storage', 'PSU', 'Case', 'Cooling', 'Accessories'];
   const categoryCounts = useMemo(() => {
     return parts.reduce((accumulator, part) => {
       const key = part.category || 'Uncategorized';
@@ -43,7 +50,7 @@ export default function PartsDatabase() {
 
   const filteredParts = parts.filter((part) => {
     const matchesSearch = part.name.toLowerCase().includes(search.toLowerCase()) || String(part.brand || '').toLowerCase().includes(search.toLowerCase());
-    const matchesCat = category === 'All' || part.category === category;
+    const matchesCat = category === 'All' || !category || part.category === category;
     return matchesSearch && matchesCat;
   });
 
@@ -54,57 +61,123 @@ export default function PartsDatabase() {
     { label: 'Current Storage', value: currentSpecs.storage || 'Not set' },
   ];
 
+  const [showQuickFacts, setShowQuickFacts] = useState(true);
+  const [showCurrentSpecs, setShowCurrentSpecs] = useState(true);
+
   return (
     <div className="parts-shell">
       <header className="parts-hero">
         <div>
           <p className="parts-kicker">ATLAS COMPONENT LAB</p>
           <h1>Find parts, compare options, and start a build.</h1>
-          <p>
-            Browse the catalog, enter your current specs for upgrade ideas, and jump into the builder when you’re ready.
-          </p>
         </div>
 
         <div className="parts-hero-actions">
-          <button className="parts-primary" onClick={() => navigate('/builder')}>Open Builder</button>
-          <button className="parts-secondary" onClick={() => navigate('/dashboard')}>Compare Benchmarks</button>
+          <Link to="/" className="parts-secondary">Home</Link>
+          <button className="parts-primary" onClick={() => requireAuth('/builder')}>Open Builder</button>
+          <button className="parts-secondary" onClick={() => requireAuth('/dashboard')}>Compare Benchmarks</button>
         </div>
       </header>
 
-      <section className="parts-toolbar">
-        <label className="parts-search-wrap">
-          <span>Search</span>
-          <input
-            type="text"
-            className="parts-search"
-            placeholder="Search components or brands..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
-
-        <label className="parts-search-wrap">
-          <span>Budget</span>
-          <input
-            type="number"
-            className="parts-search"
-            placeholder="Enter your budget"
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
-          />
-        </label>
-
-        <div className="parts-chip-row">
-          {categories.map((cat) => (
-            <button key={cat} type="button" className={category === cat ? 'parts-chip active' : 'parts-chip'} onClick={() => setCategory(cat)}>
-              {cat}
-            </button>
-          ))}
-        </div>
-      </section>
+      
 
       <section className="parts-layout">
+        <section className="parts-toolbar">
+          <label className="parts-search-wrap">
+            <span>Search</span>
+            <input
+              type="text"
+              className="parts-search"
+              placeholder="Search components or brands..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+
+          <label className="parts-search-wrap">
+            <span>Category</span>
+            <select className="parts-search" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {CATEGORY_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="parts-search-wrap">
+            <span>Budget</span>
+            <input
+              type="number"
+              min="0"
+              className="parts-search"
+              placeholder="-----"
+              value={budget}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === '') return setBudget('');
+                const n = Number(v);
+                setBudget(String(Number.isNaN(n) ? '' : Math.max(0, n)));
+              }}
+            />
+          </label>
+
+          <div className="parts-chip-row">
+            {availableCategories.map((cat) => (
+              <button key={cat} type="button" className={category === cat ? 'parts-chip active' : 'parts-chip'} onClick={() => setCategory(cat)}>
+                {cat}
+              </button>
+            ))}
+          </div>
+        </section>
+
         <aside className="parts-side-panel">
+          <div className="parts-panel-card parts-summary-card">
+            <div className="parts-quickfacts-header" onClick={() => setShowQuickFacts((s) => !s)} role="button" tabIndex={0}>
+              <h3>Quick facts</h3>
+              <button className="parts-toggle">{showQuickFacts ? '−' : '+'}</button>
+            </div>
+            {showQuickFacts && (
+              <div className="parts-quickfacts-body">
+                <ul>
+                  {quickFacts.map((item) => (
+                    <li key={item.label}>
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <div className="parts-panel-card">
+            <div className="parts-quickfacts-header" onClick={() => setShowCurrentSpecs((s) => !s)} role="button" tabIndex={0}>
+                <h3>Current PC specification</h3>
+                <button className="parts-toggle">{showCurrentSpecs ? '−' : '+'}</button>
+              </div>
+              {showCurrentSpecs && (
+                <div className="parts-currentpc-body">
+
+                <div className="parts-spec-grid">
+                  {Object.entries(currentSpecs).map(([key, value]) => (
+                    <label key={key}>
+                      <span>{key.toUpperCase()}</span>
+                      <input
+                        type="text"
+                        value={value}
+                        placeholder={`Current ${key.toUpperCase()}`}
+                        onChange={(e) => setCurrentSpecs((current) => ({ ...current, [key]: e.target.value }))}
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <div className="parts-panel-actions">
+                  <button className="parts-primary" type="button">Suggest Upgrades</button>
+                  <button className="parts-secondary" type="button" onClick={() => requireAuth('/builder')}>Build This PC</button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="parts-panel-card parts-compare-card">
             <h2>Compare & upgrade</h2>
             <p>Enter your current parts, then compare benchmarks or move straight into the builder.</p>
@@ -115,53 +188,9 @@ export default function PartsDatabase() {
             </div>
           </div>
 
-          <div className="parts-panel-card">
-            <h2>Your current PC</h2>
-            <p>Enter what you already have so ATLAS can point you toward sensible upgrades.</p>
+          
 
-            <div className="parts-spec-grid">
-              {Object.entries(currentSpecs).map(([key, value]) => (
-                <label key={key}>
-                  <span>{key.toUpperCase()}</span>
-                  <input
-                    type="text"
-                    value={value}
-                    placeholder={`Current ${key.toUpperCase()}`}
-                    onChange={(e) => setCurrentSpecs((current) => ({ ...current, [key]: e.target.value }))}
-                  />
-                </label>
-              ))}
-            </div>
-
-            <div className="parts-panel-actions">
-              <button className="parts-primary" type="button">Suggest Upgrades</button>
-              <button className="parts-secondary" type="button" onClick={() => navigate('/builder')}>Build This PC</button>
-            </div>
-          </div>
-
-          <div className="parts-panel-card parts-summary-card">
-            <h3>Quick facts</h3>
-            <ul>
-              {quickFacts.map((item) => (
-                <li key={item.label}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="parts-panel-card parts-summary-card">
-            <h3>Categories</h3>
-            <ul>
-              {categories.map((item) => (
-                <li key={item}>
-                  <span>{item}</span>
-                  <strong>{categoryCounts[item] || 0}</strong>
-                </li>
-              ))}
-            </ul>
-          </div>
+          
         </aside>
 
         <main className="parts-grid-wrap">
@@ -194,7 +223,7 @@ export default function PartsDatabase() {
                     <div className="db-card-footer">
                       <span className="db-price">#{part.component_id}</span>
                       <div className="db-card-actions">
-                        <button className="db-btn db-btn-secondary" onClick={() => navigate('/builder')}>Add to Builder</button>
+                        <button className="db-btn db-btn-secondary" onClick={() => requireAuth('/builder')}>Add to Builder</button>
                         <button className="db-btn">View Details</button>
                       </div>
                     </div>
