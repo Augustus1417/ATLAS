@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { recommendationsAPI, buildsAPI } from '../utils/api';
+import { recommendationsAPI, buildsAPI, getApiErrorMessage } from '../utils/api';
 import { formatPrice, getPartPrice } from '../utils/format';
 import PageLayout from '../components/PageLayout';
 import { RecommendedPartCard } from '../components/RecommendedPartCard';
@@ -56,9 +56,7 @@ export function RecommendationsPage() {
       setBuildName(`${workload.toUpperCase()} Build - ₱${parseInt(budget).toLocaleString()}`);
     } catch (error) {
       setErrors({
-        submit:
-          error.response?.data?.message ||
-          'Failed to generate recommendations',
+        submit: getApiErrorMessage(error, 'Failed to generate recommendations'),
       });
     } finally {
       setLoading(false);
@@ -82,10 +80,7 @@ export function RecommendationsPage() {
       applyRecommendationPayload(data.data || {});
     } catch (error) {
       setErrors({
-        submit:
-          error.response?.data?.message ||
-          error.response?.data?.detail ||
-          'Failed to regenerate build',
+        submit: getApiErrorMessage(error, 'Failed to regenerate build'),
       });
     } finally {
       setRegeneratingAll(false);
@@ -117,10 +112,7 @@ export function RecommendationsPage() {
       applyRecommendationPayload(data.data || {});
     } catch (error) {
       setErrors({
-        submit:
-          error.response?.data?.message ||
-          error.response?.data?.detail ||
-          'Failed to regenerate this part',
+        submit: getApiErrorMessage(error, 'Failed to regenerate this part'),
       });
     } finally {
       setRegeneratingCategory(null);

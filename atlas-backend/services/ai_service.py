@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from config import settings
+from utils.openrouter_client import openrouter_headers
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -268,11 +269,7 @@ def _call_openrouter_json(
     temperature: float = 0,
     max_tokens: int = 800,
 ) -> list[dict[str, str]]:
-    headers = {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
-        "HTTP-Referer": "http://localhost",
-        "X-Title": "ATLAS",
-    }
+    headers = openrouter_headers()
 
     payload_base: dict[str, Any] = {
         "messages": [
@@ -367,11 +364,7 @@ def fetch_budget_upgrade_recommendations(
     current_total: float,
 ) -> list[dict[str, str]]:
     """Ask AI for higher-tier replacements when the first pass is far under budget."""
-    headers = {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
-        "HTTP-Referer": "http://localhost",
-        "X-Title": "ATLAS",
-    }
+    headers = openrouter_headers()
     payload_base: dict[str, Any] = {
         "messages": [
             {"role": "system", "content": "Follow instructions exactly."},

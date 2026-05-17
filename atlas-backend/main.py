@@ -48,16 +48,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = settings.cors_origin_list()
+if not _cors_origins:
+    logging.warning("CORS_ORIGINS is empty — browsers may block API requests from the frontend.")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,6 +64,15 @@ app.add_middleware(
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_request: Request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content={"data": None, "message": str(exc.detail)})
+
+
+@app.exception_handler(RuntimeError)
+async def runtime_error_handler(_request: Request, exc: RuntimeError):
+    logging.error("Runtime error: %s", exc)
+    return JSONResponse(
+        status_code=503,
+        content={"data": None, "message": str(exc)},
+    )
 
 
 @app.exception_handler(RequestValidationError)
@@ -98,9 +104,36 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
 
 
 @app.get("/")
-def health_check():
-    """Health check endpoint for basic service availability."""
+def root():
+    """Basic service identity (use /health for load balancers)."""
     return {"data": {"status": "ok"}, "message": "ATLAS backend is running"}
+
+
+@app.get("/health")
+def health_check():
+    """Health check for deployment probes; verifies database connectivity."""
+    try:
+        conn = psycopg2.connect(settings.database_url)
+        conn.close()
+        db_status = "connected"
+    except Exception as exc:
+        logging.warning("Health check database error: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "data": {"status": "degraded", "database": "unavailable"},
+                "message": "Database connection failed",
+            },
+        )
+
+    return {
+        "data": {
+            "status": "ok",
+            "database": db_status,
+            "environment": settings.environment,
+        },
+        "message": "ATLAS backend is healthy",
+    }
 
 
 app.include_router(users.router)

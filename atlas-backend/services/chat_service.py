@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from config import settings
+from utils.openrouter_client import openrouter_headers
 from database import dict_cursor
 from services.ai_service import _candidate_models
 from services.recommendation_service import generate_recommendation, lookup_parts_with_pricing
@@ -89,11 +90,7 @@ def _clean_chat_reply(text: str) -> str:
 
 
 def _openrouter_headers() -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
-        "HTTP-Referer": "http://localhost",
-        "X-Title": "ATLAS",
-    }
+    return openrouter_headers()
 
 
 def _parse_block(content: str, tag: str) -> tuple[str, dict[str, Any] | None]:

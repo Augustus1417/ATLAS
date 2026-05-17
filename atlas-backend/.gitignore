@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 venv/
 .env
+atlas_dev.sqlite3
+auth_trace.log
+*.log

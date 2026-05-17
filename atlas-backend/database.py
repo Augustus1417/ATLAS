@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Generator
+import logging
 
 import sqlite3
 
@@ -7,6 +8,8 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 
 SQLITE_DB_PATH = Path(__file__).with_name("atlas_dev.sqlite3")
@@ -77,8 +80,17 @@ def _connect_sqlite() -> sqlite3.Connection:
 def get_db_connection() -> Generator:
     try:
         conn = psycopg2.connect(settings.database_url)
-    except Exception:
-        conn = _connect_sqlite()
+    except Exception as exc:
+        if settings.allow_sqlite_fallback and not settings.is_production:
+            logger.warning(
+                "PostgreSQL unavailable (%s); using local SQLite fallback (dev only).",
+                exc,
+            )
+            conn = _connect_sqlite()
+        else:
+            raise RuntimeError(
+                "Could not connect to PostgreSQL. Check DATABASE_URL and that the database is reachable."
+            ) from exc
     try:
         yield conn
     finally:

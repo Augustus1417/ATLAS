@@ -1,8 +1,12 @@
 import axios from 'axios';
 
+const DEV_API_FALLBACK = 'http://localhost:8000';
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ||
-  'http://localhost:8000';
+  (import.meta.env.DEV ? DEV_API_FALLBACK : '');
+
+const isApiConfigured = Boolean(API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -47,10 +51,16 @@ api.interceptors.response.use(
   }
 );
 
-/** Normalize API / network errors for auth forms. */
+/** Normalize API / network errors for user-facing messages. */
 export function getApiErrorMessage(error, fallback = 'Something went wrong') {
+  if (!isApiConfigured) {
+    return 'API URL is not configured. Set VITE_API_BASE_URL when building the app.';
+  }
   if (!error.response) {
-    return `Cannot reach the server at ${API_BASE_URL}. Is the backend running?`;
+    if (import.meta.env.DEV) {
+      return `Cannot reach the API (${API_BASE_URL}). Start the backend or check VITE_API_BASE_URL.`;
+    }
+    return 'Cannot reach the server. Check your connection or try again later.';
   }
   const { data, status } = error.response;
   if (data?.message) return data.message;

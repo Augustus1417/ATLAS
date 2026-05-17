@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { chatAPI, buildsAPI, recommendationsAPI } from '../utils/api';
+import { chatAPI, buildsAPI, recommendationsAPI, getApiErrorMessage } from '../utils/api';
 import {
   formatPrice,
   getPartPrice,
@@ -362,10 +362,7 @@ export function ChatPage() {
         },
       ]);
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          'Failed to reach the assistant. Check that the backend is running.'
-      );
+      setError(getApiErrorMessage(err, 'Failed to reach the assistant.'));
     } finally {
       setLoading(false);
       inputRef.current?.focus();
