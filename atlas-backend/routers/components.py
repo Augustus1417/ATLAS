@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from database import dict_cursor, get_db_connection
 from dependencies import get_current_user, require_admin
 from models.component import ComponentCreateRequest, ComponentUpdateRequest
+from utils.component_pricing import enrich_components_with_prices, enrich_pricing_row
 from utils.responses import ok
 
 router = APIRouter(prefix="/components", tags=["Components"])
@@ -35,7 +36,8 @@ def list_components(
     cur.execute(query, tuple(params))
     rows = cur.fetchall()
     cur.close()
-    return ok(data=rows, message="Components fetched successfully")
+    enriched = enrich_components_with_prices(conn, rows)
+    return ok(data=enriched, message="Components fetched successfully")
 
 
 @router.get("/{component_id}")
@@ -70,7 +72,7 @@ def get_component_detail(component_id: int, conn=Depends(get_db_connection)):
         """,
         (component_id,),
     )
-    latest_price = cur.fetchone()
+    latest_price = enrich_pricing_row(cur.fetchone())
     cur.close()
 
     return ok(

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from database import dict_cursor, get_db_connection
 from dependencies import get_current_user
 from models.build import BuildCreateRequest, BuildUpdateRequest
+from utils.component_pricing import enrich_build_component_rows
 from utils.responses import ok
 
 router = APIRouter(prefix="/builds", tags=["Builds"])
@@ -36,23 +37,61 @@ def create_build(
     )
     build = cur.fetchone()
 
-    inserted_components = []
     for component in components:
         cur.execute(
             """
             INSERT INTO build_components (build_id, component_id, quantity, price_at_save)
             VALUES (%s, %s, %s, %s)
-            RETURNING *
             """,
             (build["build_id"], component["component_id"], component["quantity"], component["price_at_save"]),
         )
-        inserted_components.append(cur.fetchone())
 
     conn.commit()
+    _attach_build_components(conn, cur, build)
     cur.close()
 
-    build["components"] = inserted_components
     return ok(data=build, message="Build created successfully", status_code=201)
+
+
+def _attach_build_components(conn, cur, build: dict) -> None:
+    cur.execute(
+        """
+        SELECT bc.*, c.name, c.brand, c.category
+        FROM build_components bc
+        JOIN components c ON c.component_id = bc.component_id
+        WHERE bc.build_id = %s
+        ORDER BY bc.build_component_id ASC
+        """,
+        (build["build_id"],),
+    )
+    build["components"] = enrich_build_component_rows(conn, cur.fetchall())
+
+
+@router.get("")
+def list_builds(
+    is_public: bool | None = Query(default=None),
+    conn=Depends(get_db_connection),
+    current_user=Depends(get_current_user),
+):
+    """List builds for the authenticated user, newest first."""
+    query = "SELECT * FROM builds WHERE user_id = %s"
+    params: list = [current_user["user_id"]]
+
+    if is_public is not None:
+        query += " AND is_public = %s"
+        params.append(is_public)
+
+    query += " ORDER BY created_at DESC"
+
+    cur = dict_cursor(conn)
+    cur.execute(query, tuple(params))
+    builds = cur.fetchall()
+
+    for build in builds:
+        _attach_build_components(conn, cur, build)
+
+    cur.close()
+    return ok(data=builds, message="Builds fetched successfully")
 
 
 @router.get("/{build_id}")
@@ -74,20 +113,9 @@ def get_build(
         cur.close()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not allowed to access this build")
 
-    cur.execute(
-        """
-        SELECT bc.*, c.name, c.brand, c.category
-        FROM build_components bc
-        JOIN components c ON c.component_id = bc.component_id
-        WHERE bc.build_id = %s
-        ORDER BY bc.build_component_id ASC
-        """,
-        (build_id,),
-    )
-    components = cur.fetchall()
+    _attach_build_components(conn, cur, build)
     cur.close()
 
-    build["components"] = components
     return ok(data=build, message="Build detail fetched successfully")
 
 
@@ -147,12 +175,9 @@ def update_build(
 
     updated = cur.fetchone()
     conn.commit()
-
-    cur.execute("SELECT * FROM build_components WHERE build_id = %s ORDER BY build_component_id ASC", (build_id,))
-    components = cur.fetchall()
+    _attach_build_components(conn, cur, updated)
     cur.close()
 
-    updated["components"] = components
     return ok(data=updated, message="Build updated successfully")
 
 

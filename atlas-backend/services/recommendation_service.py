@@ -136,6 +136,90 @@ def _part_priority(part: dict[str, Any], budget_php: int, device_type: str) -> t
         return (len(order), 0)
 
 
+def _resolve_part_with_pricing(
+    conn,
+    part: dict[str, str],
+    max_price: float | None = None,
+) -> dict[str, Any] | None:
+    """Resolve one part to DB + listings; optionally skip if cheapest exceeds max_price."""
+    cached = _lookup_recent_cached_prices(conn, part)
+
+    component_id = None
+    if not cached:
+        component_id = _ensure_component(conn, part)
+        cached = get_recent_cached_prices(conn, component_id)
+
+    if cached:
+        listings = cached
+    else:
+        try:
+            if component_id is None:
+                component_id = _ensure_component(conn, part)
+            listings = fetch_live_prices(part["name"])
+            save_pricing_history(conn, component_id, listings)
+        except SerperServiceError:
+            listings = []
+
+    if not listings:
+        listings = [{"store": "Price unavailable", "price": None, "link": None, "status": "Price unavailable"}]
+
+    cheapest = next((item for item in listings if item.get("price") is not None), None)
+
+    normalized_listings = [
+        {
+            "store": listing.get("store", "Unknown"),
+            "price": listing.get("price"),
+            "link": listing.get("link"),
+            "status": listing.get("status"),
+        }
+        for listing in listings
+    ]
+
+    if component_id is None:
+        component_id = _ensure_component(conn, part)
+
+    cheapest_price = float(cheapest["price"]) if cheapest else None
+    if max_price is not None and cheapest_price is not None and cheapest_price > max_price:
+        return None
+
+    cheapest_listing = cheapest or {}
+
+    return {
+        "component_id": component_id,
+        "category": part["category"],
+        "name": part["name"],
+        "brand": _derive_brand(part["name"]),
+        "price": cheapest_price,
+        "cheapest_price": cheapest_price,
+        "link": cheapest_listing.get("link"),
+        "store": cheapest_listing.get("store"),
+        "listings": normalized_listings,
+    }
+
+
+def lookup_parts_with_pricing(
+    conn,
+    parts: list[dict[str, str]],
+    budget_php: int | None = None,
+) -> list[dict[str, Any]]:
+    """Look up specific parts (e.g. one GPU) with retailer links; budget applies per part."""
+    max_price = float(budget_php) if budget_php else None
+    resolved: list[dict[str, Any]] = []
+    for part in parts:
+        category = str(part.get("category") or "Other").strip()
+        name = str(part.get("name") or "").strip()
+        if not name:
+            continue
+        item = _resolve_part_with_pricing(
+            conn,
+            {"category": category, "name": name},
+            max_price=max_price,
+        )
+        if item:
+            resolved.append(item)
+    return resolved
+
+
 def generate_recommendation(conn, budget_php: int, workload: str, device_type: str) -> dict[str, Any]:
     try:
         ai_parts = fetch_ai_recommendations(budget_php=budget_php, workload=workload, device_type=device_type)
@@ -145,46 +229,33 @@ def generate_recommendation(conn, budget_php: int, workload: str, device_type: s
     candidate_parts: list[dict[str, Any]] = []
 
     for part in ai_parts:
-        cached = _lookup_recent_cached_prices(conn, part)
-
-        component_id = None
-        if not cached:
-            component_id = _ensure_component(conn, part)
-            cached = get_recent_cached_prices(conn, component_id)
-
-        if cached:
-            listings = cached
-        else:
-            try:
-                if component_id is None:
-                    component_id = _ensure_component(conn, part)
-                listings = fetch_live_prices(part["name"])
-                save_pricing_history(conn, component_id, listings)
-            except SerperServiceError as exc:
-                listings = []
-
-        if not listings:
-            listings = [{"store": "Price unavailable", "price": None, "link": None, "status": "Price unavailable"}]
-
-        cheapest = next((item for item in listings if item.get("price") is not None), None)
-
-        normalized_listings = []
-        for listing in listings:
-            normalized_listings.append(
+        resolved = _resolve_part_with_pricing(conn, part)
+        if not resolved:
+            candidate_parts.append(
                 {
-                    "store": listing.get("store", "Unknown"),
-                    "price": listing.get("price"),
-                    "link": listing.get("link"),
-                    "status": listing.get("status"),
+                    "component_id": _ensure_component(conn, part),
+                    "category": part["category"],
+                    "name": part["name"],
+                    "brand": _derive_brand(part["name"]),
+                    "listings": [],
+                    "cheapest_price": None,
+                    "cheapest_listing": None,
                 }
             )
-
+            continue
         candidate_parts.append(
             {
-                "category": part["category"],
-                "name": part["name"],
-                "listings": normalized_listings,
-                "cheapest_price": float(cheapest["price"]) if cheapest else None,
+                "component_id": resolved["component_id"],
+                "category": resolved["category"],
+                "name": resolved["name"],
+                "brand": resolved["brand"],
+                "listings": resolved["listings"],
+                "cheapest_price": resolved["cheapest_price"],
+                "cheapest_listing": {
+                    "price": resolved["cheapest_price"],
+                    "link": resolved.get("link"),
+                    "store": resolved.get("store"),
+                },
             }
         )
 
@@ -205,10 +276,18 @@ def generate_recommendation(conn, budget_php: int, workload: str, device_type: s
             continue
 
         estimated_total_php += cheapest_price
+        cheapest_listing = part.get("cheapest_listing") or {}
+
         output_parts.append(
             {
+                "component_id": part["component_id"],
                 "category": part["category"],
                 "name": part["name"],
+                "brand": part["brand"],
+                "price": cheapest_price,
+                "cheapest_price": cheapest_price,
+                "link": cheapest_listing.get("link"),
+                "store": cheapest_listing.get("store"),
                 "listings": part["listings"],
             }
         )
@@ -218,4 +297,5 @@ def generate_recommendation(conn, budget_php: int, workload: str, device_type: s
         "budget_php": budget_php,
         "estimated_total_php": round(estimated_total_php, 2),
         "parts": output_parts,
+        "components": output_parts,
     }

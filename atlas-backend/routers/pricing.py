@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from database import dict_cursor, get_db_connection
 from dependencies import get_current_user
 from models.component import ComponentPricingCreateRequest
+from utils.component_pricing import enrich_pricing_row, enrich_pricing_rows
 from utils.responses import ok
 
 router = APIRouter(prefix="/components", tags=["Pricing"])
@@ -26,7 +27,7 @@ def get_component_pricing_history(component_id: int, conn=Depends(get_db_connect
         """,
         (component_id,),
     )
-    rows = cur.fetchall()
+    rows = enrich_pricing_rows(cur.fetchall())
     cur.close()
     return ok(data=rows, message="Pricing history fetched successfully")
 
@@ -53,7 +54,7 @@ def create_pricing_entry(
         """,
         (component_id, payload.price, payload.currency, payload.source),
     )
-    row = cur.fetchone()
+    row = enrich_pricing_row(cur.fetchone())
     conn.commit()
     cur.close()
     return ok(data=row, message="Pricing record created successfully", status_code=201)

@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import builds, compatibility, components, pricing, recommendations, specs, users
+from routers import builder, builds, chat, compatibility, components, pricing, recommendations, specs, users
 
 
 def ensure_roles_exist() -> None:
@@ -53,6 +53,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -67,13 +71,30 @@ async def http_exception_handler(_request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_request: Request, exc: RequestValidationError):
-    # Log raw request body to help debug JSON decode / validation issues from the frontend.
-    try:
-        body = await _request.body()
-        logging.warning("Request validation error. Raw body: %s", body.decode(errors="replace"))
-    except Exception:
-        logging.warning("Request validation error but failed to read raw body")
-    return JSONResponse(status_code=422, content={"data": exc.errors(), "message": "Validation error"})
+    # Log validation error info from Pydantic
+    logging.warning("Request validation error: %s", exc.errors())
+    
+    # Convert errors to JSON-serializable format
+    errors = []
+    for error in exc.errors():
+        error_dict = dict(error)
+        # Remove 'input' if it's bytes or not JSON-serializable
+        if 'input' in error_dict:
+            if isinstance(error_dict['input'], bytes):
+                try:
+                    error_dict['input'] = error_dict['input'].decode(errors="replace")
+                except Exception:
+                    error_dict['input'] = str(error_dict['input'])
+            else:
+                # Convert to string representation if not serializable
+                try:
+                    import json
+                    json.dumps(error_dict['input'])
+                except (TypeError, ValueError):
+                    error_dict['input'] = str(error_dict['input'])
+        errors.append(error_dict)
+    
+    return JSONResponse(status_code=422, content={"data": errors, "message": "Validation error"})
 
 
 @app.get("/")
@@ -88,4 +109,6 @@ app.include_router(specs.router)
 app.include_router(pricing.router)
 app.include_router(compatibility.router)
 app.include_router(builds.router)
+app.include_router(builder.router)
 app.include_router(recommendations.router)
+app.include_router(chat.router)

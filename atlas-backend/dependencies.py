@@ -42,6 +42,38 @@ def get_current_user(
     return dict(row)
 
 
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    conn=Depends(get_db_connection),
+) -> dict[str, Any] | None:
+    if credentials is None:
+        return None
+
+    try:
+        payload = decode_access_token(credentials.credentials)
+        user_id = int(payload["sub"])
+    except Exception:
+        return None
+
+    cur = dict_cursor(conn)
+    cur.execute(
+        """
+        SELECT u.user_id, u.role_id, u.username, u.email, u.is_active, r.role_name
+        FROM users u
+        JOIN roles r ON r.role_id = u.role_id
+        WHERE u.user_id = %s
+        """,
+        (user_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+
+    if not row or not row["is_active"]:
+        return None
+
+    return dict(row)
+
+
 def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     if str(current_user.get("role_name", "")).lower() != "admin":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin access required")

@@ -56,7 +56,12 @@ def register_user(payload: UserRegisterRequest, conn=Depends(get_db_connection))
     except Exception as exc:  # noqa: BLE001
         conn.rollback()
         cur.close()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unable to register user") from exc
+        message = str(exc).lower()
+        if "unique" in message or "duplicate" in message:
+            detail = "Email or username is already registered"
+        else:
+            detail = "Unable to register user"
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail) from exc
 
     cur.close()
     return ok(data=UserPublic.model_validate(user).model_dump(mode="json"), message="User registered successfully", status_code=201)

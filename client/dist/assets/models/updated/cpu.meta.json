@@ -1,8 +1,0 @@
-{
-  "name": "cpu",
-  "description": "Mock CPU (AM5)",
-  "socket": "AM5",
-  "snap_points": [ { "name": "pin_center", "position": [0, 132, 20], "required": true } ],
-  "tdp": 105,
-  "tri_count": 1200
-}
