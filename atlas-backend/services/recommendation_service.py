@@ -10,6 +10,8 @@ from services.ai_service import (
     fetch_ai_category_recommendation,
     fetch_ai_recommendations,
     fetch_budget_upgrade_recommendations,
+    is_bundle_device_type,
+    normalize_device_type,
 )
 from utils.component_pricing import normalize_category, parse_pricing_source
 from services.serper_service import (
@@ -36,6 +38,9 @@ BUDGET_UTILIZATION_MIN = 0.85
 UNDERPRICE_RATIO = 0.65
 UPGRADE_PRIORITY = ["GPU", "CPU", "RAM", "Storage", "Motherboard", "PSU", "Case", "Device"]
 FILL_MAX_ROUNDS = 5
+DESKTOP_ONLY_CATEGORIES = frozenset(
+    {"CPU", "GPU", "RAM", "Motherboard", "Storage", "PSU", "Case", "Cooling"}
+)
 
 
 def _derive_brand(name: str) -> str:
@@ -186,6 +191,7 @@ def _find_db_component_in_price_band(
     max_price: float,
     target_price: float,
     exclude_names: list[str] | None = None,
+    category_aliases: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Pick a catalog component with recent pricing in the requested band."""
     if max_price <= 0:
@@ -193,6 +199,8 @@ def _find_db_component_in_price_band(
 
     threshold = datetime.now(timezone.utc) - timedelta(days=7)
     exclude = {n.strip().lower() for n in (exclude_names or []) if n}
+    categories = category_aliases or [category]
+    placeholders = ", ".join(["LOWER(%s)"] * len(categories))
 
     if is_sqlite_connection(conn):
         active_clause = "(c.is_active = 1 OR c.is_active IS NULL)"
@@ -205,7 +213,7 @@ def _find_db_component_in_price_band(
         SELECT c.component_id, c.name, c.brand, c.category, ph.price, ph.source
         FROM components c
         JOIN pricing_history ph ON ph.component_id = c.component_id
-        WHERE LOWER(c.category) = LOWER(%s)
+        WHERE LOWER(c.category) IN ({placeholders})
           AND {active_clause}
           AND ph.price >= %s
           AND ph.price <= %s
@@ -213,7 +221,7 @@ def _find_db_component_in_price_band(
         ORDER BY ABS(ph.price - %s) ASC, ph.recorded_at DESC
         LIMIT 12
         """,
-        (category, min_price, max_price, threshold, target_price),
+        (*[c.lower() for c in categories], min_price, max_price, threshold, target_price),
     )
     rows = cur.fetchall()
     cur.close()
@@ -403,6 +411,98 @@ def _candidate_from_ai_part(
     }
 
 
+def _filter_bundle_device_parts(parts: list[dict[str, str]]) -> list[dict[str, str]]:
+    filtered: list[dict[str, str]] = []
+    for part in parts:
+        category = normalize_category(str(part.get("category", "")))
+        if category in DESKTOP_ONLY_CATEGORIES:
+            continue
+        name = str(part.get("name", "")).strip()
+        if not name:
+            continue
+        if category == "Device":
+            filtered.append({"category": "Device", "name": name})
+    return filtered[:1]
+
+
+def _generate_bundle_device_recommendation(
+    conn,
+    budget_php: int,
+    workload: str,
+    device_type: str,
+    *,
+    regenerate: bool = False,
+    avoid_parts: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Laptop/mobile: one complete device, never desktop parts."""
+    device_type = normalize_device_type(device_type)
+    target_price = float(budget_php) * 0.9
+
+    try:
+        ai_parts = fetch_ai_recommendations(
+            budget_php=budget_php,
+            workload=workload,
+            device_type=device_type,
+            avoid_parts=avoid_parts if avoid_parts else None,
+            regenerate=regenerate,
+        )
+    except AIServiceError:
+        ai_parts = fallback_recommendations(
+            workload=workload, device_type=device_type, budget_php=budget_php
+        )
+
+    ai_parts = _filter_bundle_device_parts(ai_parts)
+    if not ai_parts:
+        ai_parts = _filter_bundle_device_parts(
+            fallback_recommendations(workload, device_type, budget_php)
+        )
+    if not ai_parts:
+        raise RecommendationServiceError("Could not suggest a complete device for this budget.")
+
+    spec = ai_parts[0]
+    resolved = _resolve_part_with_pricing(
+        conn,
+        spec,
+        max_price=float(budget_php),
+        target_price=target_price,
+    )
+
+    output: list[dict[str, Any]] = []
+    if resolved and resolved.get("cheapest_price") is not None:
+        output = [_output_part_from_resolved(resolved)]
+    else:
+        db_match = _find_db_component_in_price_band(
+            conn,
+            "Device",
+            min_price=max(float(budget_php) * 0.5, 1000.0),
+            max_price=float(budget_php),
+            target_price=target_price,
+            category_aliases=["Device", "Laptop", "laptop", "Notebook", "notebook"],
+        )
+        if db_match:
+            output = [_output_part_from_resolved(db_match)]
+        elif resolved:
+            output = [_output_part_from_resolved(resolved)]
+        else:
+            candidate = _candidate_from_ai_part(conn, spec, {})
+            listing = candidate.get("cheapest_listing") or {}
+            output = [
+                {
+                    "component_id": candidate["component_id"],
+                    "category": "Device",
+                    "name": candidate["name"],
+                    "brand": candidate["brand"],
+                    "price": candidate.get("cheapest_price"),
+                    "cheapest_price": candidate.get("cheapest_price"),
+                    "link": listing.get("link"),
+                    "store": listing.get("store"),
+                    "listings": candidate.get("listings") or [],
+                }
+            ]
+
+    return _recommendation_result(output[:1], budget_php, workload, device_type)
+
+
 def _fill_missing_categories(
     conn,
     output_parts: list[dict[str, Any]],
@@ -411,7 +511,7 @@ def _fill_missing_categories(
     device_type: str,
     category_caps: dict[str, float],
 ) -> list[dict[str, Any]]:
-    if device_type != "desktop":
+    if is_bundle_device_type(device_type):
         return output_parts
 
     present = {p["category"] for p in output_parts}
@@ -455,6 +555,12 @@ def _assemble_within_budget(
     budget_php: int,
     device_type: str,
 ) -> list[dict[str, Any]]:
+    device_type = normalize_device_type(device_type)
+    if is_bundle_device_type(device_type):
+        candidate_parts = [
+            p for p in candidate_parts if normalize_category(p.get("category", "")) == "Device"
+        ]
+
     candidate_parts.sort(key=lambda item: _part_priority(item, budget_php, device_type))
 
     output_parts: list[dict[str, Any]] = []
@@ -487,6 +593,9 @@ def _assemble_within_budget(
                 "listings": part["listings"],
             }
         )
+
+    if is_bundle_device_type(device_type):
+        return output_parts[:1]
 
     return output_parts
 
@@ -587,6 +696,9 @@ def _upgrade_underpriced_categories(
     device_type: str,
     category_caps: dict[str, float],
 ) -> list[dict[str, Any]]:
+    if is_bundle_device_type(device_type):
+        return output_parts
+
     by_category = {p["category"]: p for p in output_parts}
 
     for category in UPGRADE_PRIORITY:
@@ -675,6 +787,9 @@ def _fill_build_to_budget(
     device_type: str,
     category_caps: dict[str, float],
 ) -> list[dict[str, Any]]:
+    if is_bundle_device_type(device_type):
+        return output_parts
+
     target_total = budget_php * BUDGET_UTILIZATION_MIN
 
     for _ in range(FILL_MAX_ROUNDS):
@@ -857,8 +972,11 @@ def generate_recommendation(
 ) -> dict[str, Any]:
     avoid_parts = avoid_parts or []
     locked_parts = locked_parts or []
+    device_type = normalize_device_type(device_type)
 
     if regenerate_category:
+        if is_bundle_device_type(device_type):
+            regenerate_category = "Device"
         return _regenerate_single_category(
             conn,
             budget_php,
@@ -867,6 +985,16 @@ def generate_recommendation(
             regenerate_category,
             locked_parts,
             avoid_parts,
+        )
+
+    if is_bundle_device_type(device_type):
+        return _generate_bundle_device_recommendation(
+            conn,
+            budget_php,
+            workload,
+            device_type,
+            regenerate=regenerate,
+            avoid_parts=avoid_parts,
         )
 
     category_caps = _category_budget_caps(budget_php, workload, device_type)

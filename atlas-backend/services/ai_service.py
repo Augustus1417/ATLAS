@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from config import settings
+from utils.component_pricing import normalize_category
 from utils.openrouter_client import openrouter_headers
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -164,6 +165,45 @@ def _avoid_parts_clause(avoid_parts: list[dict[str, str]] | None) -> str:
     )
 
 
+def normalize_device_type(device_type: str) -> str:
+    normalized = (device_type or "desktop").strip().lower()
+    if normalized in {"notebook", "laptop"}:
+        return "laptop"
+    if normalized in {"mobile", "phone", "tablet"}:
+        return "mobile"
+    return "desktop"
+
+
+def is_bundle_device_type(device_type: str) -> bool:
+    return normalize_device_type(device_type) in {"laptop", "mobile"}
+
+
+def _build_bundle_device_prompt(
+    budget_php: int,
+    workload: str,
+    device_type: str,
+    avoid_parts: list[dict[str, str]] | None = None,
+    regenerate: bool = False,
+) -> str:
+    device = normalize_device_type(device_type)
+    label = "laptop" if device == "laptop" else "mobile/tablet"
+    target_low = int(budget_php * 0.88)
+    regen_note = (
+        "\nThis is a REGENERATION request — suggest a different model than before."
+        if regenerate
+        else ""
+    )
+    return (
+        f"You recommend complete {label}s sold in the Philippines.\n"
+        f"Budget: ₱{budget_php:,}. Workload: {workload}.\n"
+        f"Choose ONE retail-ready {label} priced about ₱{target_low:,}–₱{budget_php:,}.\n"
+        'Return ONLY a JSON array with exactly ONE item: {"category": "Device", "name": "<full product name>"}\n'
+        "Do NOT return desktop components (CPU, GPU, RAM, Motherboard, Storage, PSU, Case). "
+        "The category must be Device.\n"
+        f"{regen_note}{_avoid_parts_clause(avoid_parts)}"
+    )
+
+
 def _build_prompt(
     budget_php: int,
     workload: str,
@@ -198,6 +238,18 @@ def _build_single_category_prompt(
     locked_parts: list[dict[str, str]],
     avoid_parts: list[dict[str, str]] | None = None,
 ) -> str:
+    device_type = normalize_device_type(device_type)
+    if is_bundle_device_type(device_type) and normalize_category(category) == "Device":
+        label = "laptop" if device_type == "laptop" else "mobile/tablet"
+        return (
+            f"Suggest ONE different complete {label} for the Philippines.\n"
+            f"Budget: ₱{budget_php:,}. Workload: {workload}.\n"
+            f"Target price about ₱{int(category_budget_php * 0.9):,}–₱{category_budget_php:,}.\n"
+            f"{_avoid_parts_clause(avoid_parts)}\n"
+            'Return ONLY a JSON array: [{"category": "Device", "name": "<full product name>"}]. '
+            "No desktop parts."
+        )
+
     locked_desc = (
         "; ".join(f"{p['category']}: {p['name']}" for p in locked_parts) if locked_parts else "(none)"
     )
@@ -220,6 +272,17 @@ def _build_upgrade_prompt(
     current_parts: list[dict[str, str]],
     current_total: float,
 ) -> str:
+    device_type = normalize_device_type(device_type)
+    if is_bundle_device_type(device_type):
+        label = "laptop" if device_type == "laptop" else "mobile/tablet"
+        current = current_parts[0]["name"] if current_parts else "unknown"
+        return (
+            f"Suggest ONE upgraded complete {label} for the Philippines.\n"
+            f"Budget: ₱{budget_php:,}. Current: {current} at ₱{int(current_total):,}.\n"
+            'Return ONLY a JSON array with one Device item: {"category": "Device", "name": "..."}. '
+            "No desktop parts."
+        )
+
     remaining = max(0, int(budget_php - current_total))
     target = int(budget_php * 0.92)
     parts_desc = "; ".join(f"{p['category']}: {p['name']}" for p in current_parts)
@@ -323,13 +386,23 @@ def fetch_ai_recommendations(
     avoid_parts: list[dict[str, str]] | None = None,
     regenerate: bool = False,
 ) -> list[dict[str, str]]:
-    prompt = _build_prompt(
-        budget_php,
-        workload,
-        device_type,
-        avoid_parts=avoid_parts,
-        regenerate=regenerate,
-    )
+    device_type = normalize_device_type(device_type)
+    if is_bundle_device_type(device_type):
+        prompt = _build_bundle_device_prompt(
+            budget_php,
+            workload,
+            device_type,
+            avoid_parts=avoid_parts,
+            regenerate=regenerate,
+        )
+    else:
+        prompt = _build_prompt(
+            budget_php,
+            workload,
+            device_type,
+            avoid_parts=avoid_parts,
+            regenerate=regenerate,
+        )
     temperature = 0.45 if regenerate or avoid_parts else 0.0
     return _call_openrouter_json(prompt, temperature=temperature, max_tokens=800)
 
@@ -397,15 +470,46 @@ def fetch_budget_upgrade_recommendations(
     raise AIServiceError("Failed to generate budget upgrade recommendations")
 
 
+def fallback_bundle_device(
+    workload: str,
+    device_type: str,
+    budget_php: int,
+) -> list[dict[str, str]]:
+    device = normalize_device_type(device_type)
+    if device == "mobile":
+        if budget_php > 0 and budget_php <= 15000:
+            name = "Samsung Galaxy A15 5G"
+        else:
+            name = "Xiaomi Redmi Note 13 Pro"
+        return [{"category": "Device", "name": name}]
+
+    # Laptops by budget (PHP)
+    if budget_php > 0 and budget_php <= 25000:
+        name = "ASUS VivoBook Go 15 E1504FA"
+    elif budget_php > 0 and budget_php <= 40000:
+        name = "Lenovo IdeaPad Gaming 3 15ACH6"
+    elif budget_php > 0 and budget_php <= 70000:
+        name = "ASUS TUF Gaming A15 FA506NC"
+    elif budget_php > 0 and budget_php <= 120000:
+        name = "MSI Katana 15 B13VFK"
+    else:
+        name = "ASUS ROG Zephyrus G16 GU605MI"
+
+    workload_key = _normalize_workload_key(workload)
+    if workload_key in {"gaming", "streaming"} and budget_php <= 40000:
+        name = "Acer Aspire 5 A515-57G"
+
+    return [{"category": "Device", "name": name}]
+
+
 def fallback_recommendations(
     workload: str,
     device_type: str,
     budget_php: int = 0,
 ) -> list[dict[str, str]]:
-    if device_type in {"laptop", "mobile"}:
-        return [
-            {"category": "Device", "name": "Acer Aspire Lite 15"},
-        ]
+    device_type = normalize_device_type(device_type)
+    if is_bundle_device_type(device_type):
+        return fallback_bundle_device(workload, device_type, budget_php)
 
     workload_key = _normalize_workload_key(workload)
 
