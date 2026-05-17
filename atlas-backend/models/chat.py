@@ -36,4 +36,5 @@ class ChatResponseData(BaseModel):
     parts: list[ChatRecommendedPart] = Field(default_factory=list)
     recommendation: dict | None = None
     is_full_build: bool = False
+    show_save_panel: bool = False
     active_build: dict | None = None

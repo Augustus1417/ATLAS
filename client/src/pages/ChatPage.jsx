@@ -15,9 +15,44 @@ import { parseChatBlocks } from '../utils/chatMessage';
 const WELCOME_MESSAGE = {
   role: 'assistant',
   content:
-    "Hi! I'm your ATLAS Build Assistant. Ask about parts or full builds — I'll show clickable retailer links. Select one of your saved builds above to ask questions about it.",
+    "Hi! I'm your ATLAS Build Assistant. Ask about parts or full builds — I'll show clickable retailer links. After a build recommendation, say \"save this build\" to save it. Select a saved build above to ask questions about it.",
   parts: [],
 };
+
+const SAVE_BUILD_INTENT_RE =
+  /\bsave(?:\s+as)?\s+(?:this|my|the)?\s*build\b|\bsaving\s+(?:this|my|the)\s+build\b/i;
+
+function isSaveBuildIntent(text) {
+  return SAVE_BUILD_INTENT_RE.test(text.trim());
+}
+
+function findLastSavableAssistantMessage(msgs) {
+  return [...msgs]
+    .reverse()
+    .find(
+      (m) =>
+        m.role === 'assistant' &&
+        m.content !== WELCOME_MESSAGE.content &&
+        (m.parts?.length || 0) >= 2
+    );
+}
+
+function buildSavePromptMessage(source) {
+  const saveable = (source.parts || []).filter(
+    (c) => c.component_id && getPartPrice(c)
+  );
+  return {
+    role: 'assistant',
+    content: saveable.length
+      ? 'Enter a name for your build and save it below.'
+      : 'Parts need prices before saving. Ask for a full build recommendation with retailer links, then try again.',
+    parts: source.parts,
+    recommendation: source.recommendation || null,
+    is_full_build: Boolean(source.is_full_build || source.recommendation),
+    show_save_panel: saveable.length > 0,
+    hide_part_cards: true,
+  };
+}
 
 function PartCard({ part, onRegenerate, regenerating = false }) {
   const hasLink = Boolean(getComponentLink(part));
@@ -231,7 +266,7 @@ function ChatBubble({
           <ChatMessageBody content={message.content} isUser={isUser} />
         </div>
 
-        {message.parts?.length > 0 && (
+        {message.parts?.length > 0 && !message.hide_part_cards && (
           <div className="w-full space-y-2">
             <div className="flex items-center justify-between gap-2 px-1">
               <p className="text-xs font-semibold uppercase tracking-widest text-white/45">
@@ -276,9 +311,10 @@ function ChatBubble({
           </div>
         )}
 
-        {message.is_full_build && message.parts?.length > 0 && (
-          <SaveBuildPanel message={message} onError={onSaveError} />
-        )}
+        {(message.show_save_panel || message.is_full_build) &&
+          message.parts?.length > 0 && (
+            <SaveBuildPanel message={message} onError={onSaveError} />
+          )}
       </div>
     </div>
   );
@@ -323,11 +359,6 @@ export function ChatPage() {
     (b) => String(b.build_id) === String(selectedBuildId)
   );
 
-  const isSaveBuildIntent = (text) =>
-    /\bsave\s+(?:as|this|my|the)\s+build\b|\bsave\s+(?:this|my|the)\s+build\b|\bsaving\s+(?:this|my|the)\s+build\b/i.test(
-      text.trim()
-    );
-
   const handleSend = async (e) => {
     e?.preventDefault();
     const text = input.trim();
@@ -341,20 +372,17 @@ export function ChatPage() {
     setLoading(true);
 
     if (isSaveBuildIntent(text)) {
-      const lastWithParts = [...nextMessages]
-        .reverse()
-        .find((m) => m.role === 'assistant' && m.parts?.length);
-      const saveHint =
-        'Use the Save this build panel below your parts list: enter a name, choose workload, then click Save as build. You must be signed in.';
+      const source = findLastSavableAssistantMessage(nextMessages);
       setMessages([
         ...nextMessages,
-        {
-          role: 'assistant',
-          content: saveHint,
-          parts: lastWithParts?.parts || [],
-          recommendation: lastWithParts?.recommendation || null,
-          is_full_build: Boolean(lastWithParts?.is_full_build),
-        },
+        source
+          ? buildSavePromptMessage(source)
+          : {
+              role: 'assistant',
+              content:
+                'I do not see a build to save yet. Ask for a full PC recommendation first, then say "save this build".',
+              parts: [],
+            },
       ]);
       setLoading(false);
       inputRef.current?.focus();
@@ -377,16 +405,26 @@ export function ChatPage() {
       const { data } = await chatAPI.send(payload);
       const body = data.data || {};
 
-      setMessages([
-        ...nextMessages,
-        {
-          role: 'assistant',
-          content: body.message || 'Sorry, I could not generate a response.',
-          parts: body.parts || [],
-          recommendation: body.recommendation || null,
-          is_full_build: Boolean(body.is_full_build),
-        },
-      ]);
+      let assistantMessage = {
+        role: 'assistant',
+        content: body.message || 'Sorry, I could not generate a response.',
+        parts: body.parts || [],
+        recommendation: body.recommendation || null,
+        is_full_build: Boolean(body.is_full_build),
+        show_save_panel: Boolean(body.show_save_panel),
+      };
+
+      if (body.show_save_panel) {
+        const source = findLastSavableAssistantMessage(nextMessages);
+        if (source) {
+          assistantMessage = {
+            ...buildSavePromptMessage(source),
+            content: body.message || buildSavePromptMessage(source).content,
+          };
+        }
+      }
+
+      setMessages([...nextMessages, assistantMessage]);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Failed to reach the assistant.'));
     } finally {

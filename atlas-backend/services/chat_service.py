@@ -134,11 +134,7 @@ def _is_save_build_intent(user_message: str) -> bool:
 
 
 def _save_build_intent_reply() -> str:
-    return (
-        "To save, use the Save this build panel below your parts list: "
-        "enter a build name, pick a workload, then click Save as build. "
-        "You must be signed in."
-    )
+    return "Enter a name for your build and save it below."
 
 
 def _parse_block(content: str, tag: str) -> tuple[str, dict[str, Any] | None]:
@@ -366,6 +362,7 @@ def process_chat(
             "parts": [],
             "recommendation": None,
             "is_full_build": False,
+            "show_save_panel": True,
             "active_build": active_build,
         }
 
@@ -378,6 +375,7 @@ def process_chat(
             "parts": [],
             "recommendation": None,
             "is_full_build": False,
+            "show_save_panel": False,
             "active_build": active_build,
         }
 
@@ -402,7 +400,7 @@ def process_chat(
                     device_type=str(recommend_params.get("device_type") or "desktop"),
                 )
                 parts = recommendation.get("parts") or recommendation.get("components") or []
-                is_full_build = _is_full_build(parts)
+                is_full_build = bool(parts)
             except Exception:
                 parts = []
 
@@ -433,6 +431,9 @@ def process_chat(
     if parts and not reply_text:
         reply_text = "Here are matching parts with retailer links."
 
+    if not is_full_build and parts and len(parts) >= 3 and _is_full_build(parts):
+        is_full_build = True
+
     reply_text = _clean_chat_reply(reply_text or "")
 
     return {
@@ -440,5 +441,6 @@ def process_chat(
         "parts": parts,
         "recommendation": recommendation,
         "is_full_build": is_full_build,
+        "show_save_panel": False,
         "active_build": active_build,
     }
