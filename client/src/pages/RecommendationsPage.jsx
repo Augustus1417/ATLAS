@@ -21,7 +21,6 @@ export function RecommendationsPage() {
   const navigate = useNavigate();
   const [budget, setBudget] = useState('150000');
   const [workload, setWorkload] = useState('gaming');
-  const [deviceType, setDeviceType] = useState('desktop');
   const [recommendation, setRecommendation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -49,7 +48,7 @@ export function RecommendationsPage() {
       const { data } = await recommendationsAPI.generate({
         budget_php: parseInt(budget),
         workload,
-        device_type: deviceType,
+        device_type: 'desktop',
       });
 
       applyRecommendationPayload(data.data || {});
@@ -73,7 +72,7 @@ export function RecommendationsPage() {
       const { data } = await recommendationsAPI.generate({
         budget_php: parseInt(budget, 10),
         workload,
-        device_type: deviceType,
+        device_type: 'desktop',
         regenerate: true,
         avoid_parts: recommendation.components.map(partSelection),
       });
@@ -104,7 +103,7 @@ export function RecommendationsPage() {
       const { data } = await recommendationsAPI.generate({
         budget_php: parseInt(budget, 10),
         workload,
-        device_type: deviceType,
+        device_type: 'desktop',
         regenerate_category: category,
         locked_parts: locked,
         avoid_parts: avoid,
@@ -206,16 +205,6 @@ export function RecommendationsPage() {
                 },
                 { value: 'productivity', label: '💼 Productivity' },
                 { value: 'workstation', label: '🖥️ Workstation' },
-              ]}
-            />
-
-            <Select
-              label="Device Type"
-              value={deviceType}
-              onChange={(e) => setDeviceType(e.target.value)}
-              options={[
-                { value: 'desktop', label: 'Desktop' },
-                { value: 'laptop', label: 'Laptop' },
               ]}
             />
 
