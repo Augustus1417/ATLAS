@@ -135,7 +135,7 @@ def update_build(
             set_parts.append(f"{key} = %s")
             values.append(value)
 
-        set_parts.append("updated_at = NOW()")
+        set_parts.append("updated_at = CURRENT_TIMESTAMP")
         values.append(build_id)
 
         cur.execute(

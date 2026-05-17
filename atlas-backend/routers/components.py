@@ -16,7 +16,20 @@ def list_components(
     conn=Depends(get_db_connection),
 ):
     """List all components with optional category, brand, and active-state filters."""
-    query = "SELECT * FROM components WHERE 1=1"
+    query = """
+        SELECT c.*, lp.price AS price
+        FROM components c
+        LEFT JOIN (
+            SELECT ph.component_id, ph.price
+            FROM pricing_history ph
+            INNER JOIN (
+                SELECT component_id, MAX(recorded_at) AS recorded_at
+                FROM pricing_history
+                GROUP BY component_id
+            ) latest ON latest.component_id = ph.component_id AND latest.recorded_at = ph.recorded_at
+        ) lp ON lp.component_id = c.component_id
+        WHERE 1=1
+    """
     params = []
 
     if category is not None:
@@ -29,7 +42,7 @@ def list_components(
         query += " AND is_active = %s"
         params.append(is_active)
 
-    query += " ORDER BY component_id ASC"
+    query += " ORDER BY c.component_id ASC"
 
     cur = dict_cursor(conn)
     cur.execute(query, tuple(params))
@@ -126,7 +139,7 @@ def update_component(
         set_parts.append(f"{key} = %s")
         values.append(value)
 
-    set_parts.append("updated_at = NOW()")
+    set_parts.append("updated_at = CURRENT_TIMESTAMP")
     values.append(component_id)
 
     cur = dict_cursor(conn)
@@ -157,7 +170,7 @@ def soft_delete_component(
     cur.execute(
         """
         UPDATE components
-        SET is_active = FALSE, updated_at = NOW()
+        SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
         WHERE component_id = %s
         RETURNING *
         """,

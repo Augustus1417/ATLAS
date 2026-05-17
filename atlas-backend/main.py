@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 
 import psycopg2
@@ -8,7 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import builds, compatibility, components, pricing, recommendations, specs, users
+from routers import builds, compatibility, components, pricing, recommendations, specs, users, imports
 
 
 def ensure_roles_exist() -> None:
@@ -38,6 +39,15 @@ def ensure_roles_exist() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     ensure_roles_exist()
+    if settings.auto_import_known_sources:
+        async def _run_initial_sync():
+            try:
+                imports.sync_known_sources(limit=settings.auto_import_limit)
+                logging.info("Automatic known-source import completed")
+            except Exception:
+                logging.exception("Automatic known-source import failed")
+
+        asyncio.create_task(_run_initial_sync())
     yield
 
 
@@ -89,3 +99,4 @@ app.include_router(pricing.router)
 app.include_router(compatibility.router)
 app.include_router(builds.router)
 app.include_router(recommendations.router)
+app.include_router(imports.router)

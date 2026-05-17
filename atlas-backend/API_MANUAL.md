@@ -29,6 +29,16 @@ Authorization: Bearer <access_token>
 - Missing resources return `404`
 - External recommendation failures return `502`
 
+## Environment
+
+Set these in `atlas-backend/.env` for local development:
+
+- `AUTO_IMPORT_KNOWN_SOURCES=true` to run the remembered retailer sync on startup
+- `AUTO_IMPORT_LIMIT=20` to cap how many scraped items each source imports per run
+- The known retailers are EasyPC, PCX, PCWorth, and GameOne
+
+If `AUTO_IMPORT_KNOWN_SOURCES` is enabled, the backend will automatically scrape and import the remembered sources when the app starts.
+
 ## Auth Flow
 
 1. Register a user.

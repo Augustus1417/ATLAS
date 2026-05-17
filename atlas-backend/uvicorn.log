@@ -1,0 +1,12 @@
+INFO:     Will watch for changes in these directories: ['C:\\Users\\slick\\ATLAS\\atlas-backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [10432] using WatchFiles
+INFO:     Started server process [14664]
+INFO:     Waiting for application startup.
+WARNING:root:Could not connect to database during startup: connection to server at "localhost" (::1), port 5432 failed: Connection refused (0x0000274D/10061)
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (127.0.0.1), port 5432 failed: Connection refused (0x0000274D/10061)
+	Is the server running on that host and accepting TCP/IP connections?
+
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'utils\security.py'. Reloading...

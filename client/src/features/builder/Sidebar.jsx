@@ -193,8 +193,13 @@ function CategoryGroup({ category, open, onToggle, completed, active, selectedPa
                   }
                 }}
               >
+                {part.image_url ? (
+                  <div className="part-media">
+                    <img className="part-image" src={part.image_url} alt={part.name} loading="lazy" />
+                  </div>
+                ) : null}
                 <div className="part-row">
-                  <span className="part-name">{part.name}</span>
+                  <span className="part-name part-name-strong">{part.name}</span>
                   <span className="part-price">
                     {part.recommended ? <span className="rec-pill">REC</span> : null}
                     {installedCount > 0 ? <span className="count-pill">x{installedCount}</span> : null}
@@ -202,7 +207,7 @@ function CategoryGroup({ category, open, onToggle, completed, active, selectedPa
                   </span>
                 </div>
                 <div className="part-row" style={{ marginTop: 6 }}>
-                  <span className="part-name">{part.kind || part.category}</span>
+                  <span className="part-name">{part.brand || 'Generic'}</span>
                   <span className="part-name">{formatSlotHint(part.slotHint)}</span>
                 </div>
                 {QUANTITY_PART_KINDS.has(part.kind || part.category) ? (

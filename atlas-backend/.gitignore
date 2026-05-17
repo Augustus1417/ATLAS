@@ -1,3 +1,4 @@
+/.dev_jwt_secret
 __pycache__/
 *.pyc
 venv/

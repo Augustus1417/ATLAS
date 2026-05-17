@@ -9,14 +9,14 @@
 
 .parts-hero {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 20px;
-  align-items: end;
-  padding: 6px 4px 24px;
+  align-items: center;
+  padding: 6px 4px 18px;
+  position: relative;
 }
 
 .parts-kicker {
-  margin: 0 0 8px;
   color: var(--accent);
   font-size: 0.72rem;
   letter-spacing: 0.28em;
@@ -40,7 +40,19 @@
 .parts-hero-actions {
   display: flex;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  margin-left: auto;
+  align-items: center;
+}
+
+/* Pin actions to the right edge on wider screens */
+@media (min-width: 900px) {
+  .parts-hero-actions {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
 }
 
 /* Responsive navigation scaling: reduce button/text sizes on smaller screens */
@@ -77,12 +89,10 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.parts-toolbar {
-  display: grid;
-  grid-template-columns: 1fr 160px 140px;
-  gap: 14px;
-  margin-bottom: 18px;
-  align-items: center;
+.parts-primary:hover,
+.parts-secondary:hover,
+.db-btn:hover {
+  transform: translateY(-1px);
 }
 
 .parts-search-wrap {
@@ -111,6 +121,7 @@
 .parts-search[type="number"],
 .parts-search,
 .parts-search-wrap select {
+      border: 1px solid rgba(255, 255, 255, 0.08);
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
@@ -179,7 +190,7 @@
   grid-template-areas:
     "aside toolbar"
     "aside main";
-  gap: 18px;
+  gap: 12px;
   align-items: start;
 }
 
@@ -189,11 +200,15 @@
   grid-area: aside;
 }
 
+/* Nudge the side panel content down so the Quick facts box aligns with the search input's top */
+.parts-side-panel {
+}
+
 .parts-toolbar {
   grid-area: toolbar;
   display: flex;
   gap: 14px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .parts-toolbar .parts-search-wrap {
@@ -210,6 +225,14 @@
 }
 
 .parts-toolbar .parts-search-wrap:nth-child(3) {
+  flex: 0 0 160px;
+}
+
+.parts-toolbar .parts-search-wrap:nth-child(4) {
+  flex: 0 0 140px;
+}
+
+.parts-toolbar .parts-search-wrap:nth-child(5) {
   flex: 0 0 140px;
 }
 
@@ -230,8 +253,8 @@
 .parts-panel-card {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  padding: 18px;
+  border-radius: 12px;
+  padding: 10px;
 }
 
 .parts-panel-card h2,
@@ -252,6 +275,27 @@
 
 .parts-quickfacts-header h3 {
   margin: 0;
+  font-size: 1rem;
+}
+
+.parts-quickfacts-toplabel {
+  color: #9fb1c2;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+/* Nudge the Quick facts card slightly to align its top with the search input field */
+.parts-panel-card.parts-summary-card {
+  margin-top: -14px;
+}
+
+@media (max-width: 980px) {
+  .parts-panel-card.parts-summary-card {
+    margin-top: 0;
+  }
 }
 
 .parts-toggle {
@@ -263,16 +307,17 @@
 
 .parts-quickfacts-body ul {
   list-style: none;
-  padding: 8px 0 0;
+  padding: 6px 0 0;
   margin: 0;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .parts-quickfacts-body li {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
+  font-size: 0.88rem;
 }
 
 .parts-panel-card p {
@@ -282,7 +327,7 @@
 
 .parts-spec-grid {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .parts-spec-grid label {
@@ -292,7 +337,7 @@
 
 .parts-spec-grid span {
   color: #95a7ba;
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-weight: 700;
@@ -303,16 +348,16 @@
   background: rgba(255, 255, 255, 0.05);
   color: var(--text);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 11px 12px;
+  border-radius: 8px;
+  padding: 8px 10px;
   box-sizing: border-box;
   max-width: 100%;
 }
 
 .parts-panel-actions {
   display: grid;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .parts-panel-actions .parts-primary,
@@ -331,9 +376,9 @@
 .parts-summary-card li {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   color: #dce8f3;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
 }
 
 .parts-summary-card li strong {
@@ -346,7 +391,7 @@
 
 .parts-grid-wrap {
   display: grid;
-  gap: 14px;
+  gap: 8px;
 }
 
 .parts-grid-header {
@@ -400,9 +445,51 @@
   color: #9fb1c2;
 }
 
+
+.db-card-image-wrap {
+  margin: 0 14px 12px;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.db-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .db-card-body {
   padding: 16px 14px 0;
   flex: 1;
+}
+
+.db-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 10px 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(38, 208, 255, 0.08);
+  border: 1px solid rgba(38, 208, 255, 0.12);
+}
+
+.db-price-label {
+  color: #9fb1c2;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.db-price-value {
+  color: #effcff;
+  font-size: 1rem;
 }
 
 .db-card-body h3 {
@@ -462,6 +549,11 @@
 .db-btn-secondary {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text);
+
+.db-card-actions .db-btn,
+.db-card-actions .db-btn-secondary {
+  min-width: 96px;
+}
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -477,15 +569,24 @@
 }
 
 @media (max-width: 980px) {
-  .parts-hero,
+  /* Stack the toolbar, main grid and side panel into a single column */
   .parts-layout {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "toolbar"
+      "main"
+      "aside";
     display: grid;
     align-items: start;
   }
 
+  /* Keep the hero as a vertical stack on medium screens */
   .parts-hero {
+    display: flex;
+    flex-direction: column;
     gap: 16px;
+    align-items: flex-start;
+    position: static;
   }
 
   .parts-hero-actions,
@@ -498,6 +599,18 @@
   .db-btn {
     padding: 10px 12px;
     font-size: 0.9rem;
+  }
+
+  /* Ensure side panel stretches full width when stacked */
+  .parts-side-panel {
+    width: 100%;
+  }
+
+  .parts-hero-actions {
+    position: static;
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 
@@ -550,7 +663,7 @@
     width: 100%;
     display: flex;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-start;
   }
 
@@ -564,3 +677,40 @@
     margin-left: 0;
   }
 }
+
+/* Keep card action buttons on one line and allow horizontal fallback; ensure hero heading can shrink */
+.db-card-actions {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.parts-hero-actions {
+  flex-wrap: nowrap;
+  overflow-x: visible; /* avoid horizontal scrolling from hero */
+  min-width: 0;
+}
+
+/* Allow the hero text container to shrink so the heading reduces instead of causing scroll */
+.parts-hero > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.parts-hero h1 {
+  font-size: clamp(1.25rem, 3.2vw, 2.4rem);
+  line-height: 1.1;
+  overflow-wrap: break-word;
+}
+
+.parts-hero-actions a,
+.parts-hero-actions button,
+.db-card-actions .db-btn,
+.db-card-actions .db-btn-secondary,
+.parts-hero-actions .parts-primary {
+  white-space: nowrap;
+  min-width: 0;
+  font-size: clamp(0.72rem, 1.4vw, 0.95rem);
+  padding: clamp(6px, 1.0vw, 12px) clamp(8px, 1.2vw, 16px);
+}
+
+/* Quick facts card uses default flow positioning; small spacing handled by label margin */

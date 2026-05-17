@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
@@ -64,6 +65,84 @@ def _initialize_sqlite(conn: sqlite3.Connection) -> None:
             ('user', 'Standard user role')
         """
     )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS components (
+            component_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            brand TEXT,
+            category TEXT,
+            image_url TEXT,
+            form_factor TEXT,
+            release_year INTEGER,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            added_by INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cur.execute("PRAGMA table_info(components)")
+    component_columns = {row[1] for row in cur.fetchall()}
+    if "image_url" not in component_columns:
+        cur.execute("ALTER TABLE components ADD COLUMN image_url TEXT")
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS component_specs (
+            spec_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            component_id INTEGER NOT NULL,
+            spec_name TEXT NOT NULL,
+            spec_value TEXT NOT NULL,
+            unit TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (component_id) REFERENCES components(component_id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pricing_history (
+            price_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            component_id INTEGER NOT NULL,
+            price REAL NOT NULL,
+            currency TEXT,
+            source TEXT,
+            recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (component_id) REFERENCES components(component_id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS builds (
+            build_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            build_name TEXT NOT NULL,
+            intended_workload TEXT,
+            total_price REAL,
+            is_public INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS build_components (
+            build_component_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            build_id INTEGER NOT NULL,
+            component_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL,
+            price_at_save REAL NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (build_id) REFERENCES builds(build_id),
+            FOREIGN KEY (component_id) REFERENCES components(component_id)
+        )
+        """
+    )
     conn.commit()
 
 
@@ -83,6 +162,20 @@ def get_db_connection() -> Generator:
         yield conn
     finally:
         conn.close()
+
+
+@contextmanager
+def db_connection():
+    """Context manager wrapper around get_db_connection for code that needs `with`."""
+    generator = get_db_connection()
+    conn = next(generator)
+    try:
+        yield conn
+    finally:
+        try:
+            next(generator)
+        except StopIteration:
+            pass
 
 
 def dict_cursor(conn):

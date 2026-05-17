@@ -45,6 +45,148 @@ const SLOT_PRIORITY_BY_KIND = {
   Case: ['case_shell'],
 };
 
+function inferLiveKind(category, name) {
+  const text = `${category || ''} ${name || ''}`.toLowerCase();
+  if (text.includes('case') || text.includes('chassis')) return 'Case';
+  if (text.includes('motherboard') || text.includes('mobo')) return 'Motherboard';
+  if (text.includes('psu') || text.includes('power supply') || text.includes('80 plus')) return 'PSU';
+  if (text.includes('ram') || text.includes('ddr4') || text.includes('ddr5') || text.includes('memory')) return 'RAM';
+  if (text.includes('ssd') || text.includes('nvme') || text.includes('hdd') || text.includes('hard drive') || text.includes('storage')) return 'Storage';
+  if (text.includes('graphics') || text.includes('videocard') || text.includes('video card') || text.includes('gpu') || text.includes('rtx') || text.includes('gtx') || text.includes('radeon')) return 'GPU';
+  if (text.includes('cooler') || text.includes('fan') || text.includes('heatsink') || text.includes('aio') || text.includes('liquid cooler')) return 'Fans';
+  if (text.includes('processor') || text.includes('cpu') || text.includes('ryzen') || text.includes('core i') || text.includes('intel')) return 'CPU';
+  return null;
+}
+
+function inferSocketFromName(name) {
+  const text = String(name || '').toLowerCase();
+  const match = text.match(/(am5|am4|lga1700|lga1851|lga1200|lga1151)/i);
+  if (match) return match[1].toUpperCase();
+  if (text.includes('ryzen 9') || text.includes('ryzen 7') || text.includes('ryzen 5') || text.includes('ryzen 3')) {
+    return text.includes('7000') || text.includes('8000') || text.includes('9000') ? 'AM5' : 'AM4';
+  }
+  if (text.includes('core ultra') || text.includes('intel core i')) {
+    return 'LGA1700';
+  }
+  return null;
+}
+
+function inferFormFactor(name) {
+  const text = String(name || '').toLowerCase();
+  if (text.includes('mini-itx') || text.includes('mini itx') || text.includes('sff')) return 'Mini-ITX';
+  if (text.includes('matx') || text.includes('micro atx')) return 'mATX';
+  return 'ATX';
+}
+
+function inferRamType(name) {
+  const text = String(name || '').toLowerCase();
+  return text.includes('ddr5') ? 'DDR5' : 'DDR4';
+}
+
+function inferGpuLength(name) {
+  const text = String(name || '').toLowerCase();
+  if (text.includes('5090') || text.includes('5080') || text.includes('4090')) return 355;
+  if (text.includes('4080') || text.includes('4070') || text.includes('7800 xt')) return 320;
+  if (text.includes('4060') || text.includes('5060') || text.includes('5050')) return 250;
+  if (text.includes('3050') || text.includes('2060')) return 230;
+  return 280;
+}
+
+function inferCaseProfile(name) {
+  const formFactor = inferFormFactor(name);
+  const lower = String(name || '').toLowerCase();
+  const isItx = formFactor === 'Mini-ITX';
+  const isMatx = formFactor === 'mATX';
+  return {
+    supportedFormFactors: isItx ? ['Mini-ITX'] : isMatx ? ['mATX', 'Mini-ITX'] : ['ATX', 'mATX', 'Mini-ITX'],
+    maxGpuLengthMm: isItx ? 305 : isMatx ? 330 : 390,
+    psuFormFactor: isItx || lower.includes('sff') ? 'SFX' : 'ATX',
+    fanSizes: isItx ? [92, 120] : [120, 140],
+    casePreset: isItx ? 'itx-sff' : isMatx ? 'matx-compact' : 'atx-mid',
+    description: 'Live catalog component',
+  };
+}
+
+function inferSlotHint(kind, name) {
+  const text = `${kind || ''} ${name || ''}`.toLowerCase();
+  if (kind === 'Case') return 'case_shell';
+  if (kind === 'Motherboard') return 'mobo';
+  if (kind === 'CPU') return 'cpu_socket';
+  if (kind === 'RAM') return 'ram1';
+  if (kind === 'Storage') return text.includes('sata') ? 'sata1' : 'm2_1';
+  if (kind === 'GPU') return 'pcie1';
+  if (kind === 'PSU') return 'psu_bay';
+  if (kind === 'Fans') return 'fan_front1';
+  return 'case_shell';
+}
+
+function normalizeLiveComponent(row) {
+  const kind = inferLiveKind(row.category, row.name);
+  if (!kind) return null;
+
+  const name = String(row.name || '').trim();
+  const lower = name.toLowerCase();
+  const normalized = {
+    id: `component-${row.component_id}`,
+    sourceId: row.component_id,
+    kind,
+    name,
+    brand: row.brand || 'Generic',
+    category: kind,
+    price: Number(row.price || 0),
+    image_url: row.image_url || null,
+    slotHint: inferSlotHint(kind, name),
+  };
+
+  if (kind === 'Case') {
+    return { ...normalized, ...inferCaseProfile(name) };
+  }
+  if (kind === 'Motherboard') {
+    const formFactor = inferFormFactor(name);
+    return {
+      ...normalized,
+      socket: inferSocketFromName(name),
+      formFactor,
+      ramType: inferRamType(name),
+      maxRamSlots: formFactor === 'Mini-ITX' ? 2 : 4,
+      pcieGen: lower.includes('pcie 5') ? 'PCIe 5.0' : 'PCIe 4.0',
+    };
+  }
+  if (kind === 'CPU') {
+    return { ...normalized, socket: inferSocketFromName(name) };
+  }
+  if (kind === 'RAM') {
+    return { ...normalized, ramType: inferRamType(name) };
+  }
+  if (kind === 'Storage') {
+    return { ...normalized, interface: lower.includes('nvme') || lower.includes('m.2') ? 'NVMe' : 'SATA' };
+  }
+  if (kind === 'GPU') {
+    return { ...normalized, lengthMm: inferGpuLength(name) };
+  }
+  if (kind === 'PSU') {
+    return { ...normalized, formFactor: lower.includes('sfx') ? 'SFX' : 'ATX' };
+  }
+  if (kind === 'Fans') {
+    const sizeMatch = name.match(/(92|120|140)\s*mm/i);
+    return { ...normalized, sizeMm: sizeMatch ? Number(sizeMatch[1]) : 120 };
+  }
+
+  return normalized;
+}
+
+function mergePartLists(primary, fallback) {
+  const merged = [];
+  const seen = new Set();
+  [...(primary || []), ...(fallback || [])].forEach((part) => {
+    const key = `${normalizeName(part.name)}|${part.kind || part.category}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(part);
+  });
+  return merged;
+}
+
 export default function useBuilderState() {
   const [budgetPhp, setBudgetPhp] = useState(defaultBudgetPhp);
   const [workload, setWorkload] = useState(workloadPresets[0]);
@@ -52,6 +194,7 @@ export default function useBuilderState() {
   const [selectedMotherboard, setSelectedMotherboard] = useState(null);
   const [recommendationSource, setRecommendationSource] = useState('local');
   const [backendRecommendations, setBackendRecommendations] = useState([]);
+  const [liveComponents, setLiveComponents] = useState([]);
 
   const [selectedPart, setSelectedPart] = useState(null);
   const [pendingPart, setPendingPart] = useState(null);
@@ -74,6 +217,63 @@ export default function useBuilderState() {
     });
     return map;
   }, [backendRecommendations]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    atlasApi
+      .listComponents({ is_active: true })
+      .then((rows) => {
+        if (!cancelled) {
+          setLiveComponents(Array.isArray(rows) ? rows : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLiveComponents([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const liveCatalog = useMemo(() => {
+    const buckets = {
+      Case: [],
+      Motherboard: [],
+      CPU: [],
+      RAM: [],
+      Storage: [],
+      GPU: [],
+      PSU: [],
+      Fans: [],
+    };
+
+    liveComponents.forEach((row) => {
+      const normalized = normalizeLiveComponent(row);
+      if (normalized && buckets[normalized.kind]) {
+        buckets[normalized.kind].push(normalized);
+      }
+    });
+
+    return buckets;
+  }, [liveComponents]);
+
+  const catalog = useMemo(
+    () => ({
+      cases: mergePartLists(liveCatalog.Case, mockCatalog.cases),
+      motherboards: mergePartLists(liveCatalog.Motherboard, mockCatalog.motherboards),
+      cpu: mergePartLists(liveCatalog.CPU, mockCatalog.cpu),
+      ram: mergePartLists(liveCatalog.RAM, mockCatalog.ram),
+      storage: mergePartLists(liveCatalog.Storage, mockCatalog.storage),
+      gpu: mergePartLists(liveCatalog.GPU, mockCatalog.gpu),
+      psu: mergePartLists(liveCatalog.PSU, mockCatalog.psu),
+      fans: mergePartLists(liveCatalog.Fans, mockCatalog.fans),
+    }),
+    [liveCatalog]
+  );
 
   const completion = useMemo(() => {
     const values = Object.values(installedParts || {});
@@ -144,8 +344,8 @@ export default function useBuilderState() {
 
   const filteredMotherboards = useMemo(() => {
     if (!selectedCase) return [];
-    return mockCatalog.motherboards.filter((board) => selectedCase.supportedFormFactors.includes(board.formFactor));
-  }, [selectedCase]);
+    return catalog.motherboards.filter((board) => selectedCase.supportedFormFactors.includes(board.formFactor));
+  }, [catalog.motherboards, selectedCase]);
 
   const localRecommendations = useMemo(() => {
     if (!selectedCase || !selectedMotherboard) {
@@ -160,21 +360,21 @@ export default function useBuilderState() {
     }
 
     return {
-      CPU: mockCatalog.cpu.filter((part) => part.socket === selectedMotherboard.socket),
-      RAM: mockCatalog.ram.filter((part) => part.ramType === selectedMotherboard.ramType),
-      Storage: mockCatalog.storage,
-      GPU: mockCatalog.gpu.filter((part) => part.lengthMm <= selectedCase.maxGpuLengthMm),
-      PSU: mockCatalog.psu.filter((part) => part.formFactor === selectedCase.psuFormFactor),
-      Fans: mockCatalog.fans.filter((part) => selectedCase.fanSizes.includes(part.sizeMm)),
+      CPU: catalog.cpu.filter((part) => !selectedMotherboard.socket || !part.socket || part.socket === selectedMotherboard.socket),
+      RAM: catalog.ram.filter((part) => !selectedMotherboard.ramType || !part.ramType || part.ramType === selectedMotherboard.ramType),
+      Storage: catalog.storage,
+      GPU: catalog.gpu.filter((part) => !selectedCase.maxGpuLengthMm || !part.lengthMm || part.lengthMm <= selectedCase.maxGpuLengthMm),
+      PSU: catalog.psu.filter((part) => !selectedCase.psuFormFactor || !part.formFactor || part.formFactor === selectedCase.psuFormFactor),
+      Fans: catalog.fans.filter((part) => !selectedCase.fanSizes?.length || !part.sizeMm || selectedCase.fanSizes.includes(part.sizeMm)),
     };
-  }, [selectedCase, selectedMotherboard]);
+  }, [catalog, selectedCase, selectedMotherboard]);
 
   const guidedSections = useMemo(() => {
     const sections = [
       {
         key: 'Case',
         name: 'Case',
-        parts: markRecommended(mockCatalog.cases, 'Case'),
+        parts: markRecommended(catalog.cases, 'Case'),
         locked: false,
         hint: 'Select a chassis style and size first.',
       },
@@ -472,6 +672,11 @@ export default function useBuilderState() {
     return true;
   }
 
+  function updateRecommendedParts(parts) {
+    setBackendRecommendations(Array.isArray(parts) ? parts : []);
+    setRecommendationSource(Array.isArray(parts) && parts.length ? 'backend' : 'local');
+  }
+
   return {
     stageOrder,
     sections: sectionsWithStatus,
@@ -480,6 +685,7 @@ export default function useBuilderState() {
     workload,
     setWorkload,
     recommendationSource,
+    updateRecommendedParts,
     activeSectionKey,
     completion,
     installedPartCounts,

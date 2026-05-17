@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=60, alias="JWT_EXPIRE_MINUTES")
+    auto_import_known_sources: bool = Field(default=False, alias="AUTO_IMPORT_KNOWN_SOURCES")
+    auto_import_limit: int = Field(default=20, alias="AUTO_IMPORT_LIMIT")
 
     model_config = SettingsConfigDict(
         env_file=".env",

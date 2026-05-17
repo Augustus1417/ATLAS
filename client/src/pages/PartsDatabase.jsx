@@ -8,8 +8,9 @@ export default function PartsDatabase() {
   const [parts, setParts] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
+  const [brand, setBrand] = useState('All');
   const [budget, setBudget] = useState('');
-  const [currentSpecs, setCurrentSpecs] = useState({ cpu: '', gpu: '', ram: '', storage: '' });
+  const [currentSpecs, setCurrentSpecs] = useState({ cpu: '', gpu: '', ram: '', storage: '', motherboard: '', psu: '', case: '', cooling: '' });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,6 +28,26 @@ export default function PartsDatabase() {
     fetchParts();
   }, [navigate]);
 
+  const availableCategories = useMemo(() => {
+    const knownOrder = ['Pre-built', 'CPU', 'GPU', 'Motherboard', 'RAM', 'Storage', 'PSU', 'Case', 'Cooling', 'Accessories'];
+    const fromData = [...new Set(parts.map((part) => part.category).filter(Boolean))];
+    const ordered = knownOrder.filter((cat) => fromData.includes(cat));
+    const remainder = fromData.filter((cat) => !knownOrder.includes(cat));
+    return ['All', ...ordered, ...remainder];
+  }, [parts]);
+
+  const availableBrands = useMemo(() => {
+    const fromData = [...new Set(parts.map((part) => part.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    return ['All', ...fromData];
+  }, [parts]);
+
+  const formatPrice = (value) => {
+    if (value === null || value === undefined || value === '') return 'Price unavailable';
+    const number = Number(value);
+    if (Number.isNaN(number)) return 'Price unavailable';
+    return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(number);
+  };
+
   // Helper to require auth for actions that need it (builder, dashboard)
   function requireAuth(target) {
     const token = window.localStorage.getItem('atlas_token');
@@ -38,20 +59,11 @@ export default function PartsDatabase() {
     return true;
   }
 
-  const availableCategories = useMemo(() => [...new Set(parts.map((part) => part.category).filter(Boolean))], [parts]);
-  const CATEGORY_OPTIONS = ['All', 'CPU', 'GPU', 'Motherboard', 'RAM', 'Storage', 'PSU', 'Case', 'Cooling', 'Accessories'];
-  const categoryCounts = useMemo(() => {
-    return parts.reduce((accumulator, part) => {
-      const key = part.category || 'Uncategorized';
-      accumulator[key] = (accumulator[key] || 0) + 1;
-      return accumulator;
-    }, {});
-  }, [parts]);
-
   const filteredParts = parts.filter((part) => {
     const matchesSearch = part.name.toLowerCase().includes(search.toLowerCase()) || String(part.brand || '').toLowerCase().includes(search.toLowerCase());
-    const matchesCat = category === 'All' || !category || part.category === category;
-    return matchesSearch && matchesCat;
+    const matchesCategory = category === 'All' || !category || part.category === category;
+    const matchesBrand = brand === 'All' || !brand || part.brand === brand;
+    return matchesSearch && matchesCategory && matchesBrand;
   });
 
   const quickFacts = [
@@ -59,17 +71,21 @@ export default function PartsDatabase() {
     { label: 'Current GPU', value: currentSpecs.gpu || 'Not set' },
     { label: 'Current RAM', value: currentSpecs.ram || 'Not set' },
     { label: 'Current Storage', value: currentSpecs.storage || 'Not set' },
+    { label: 'Motherboard', value: currentSpecs.motherboard || 'Not set' },
+    { label: 'PSU', value: currentSpecs.psu || 'Not set' },
+    { label: 'Case', value: currentSpecs.case || 'Not set' },
+    { label: 'Cooling', value: currentSpecs.cooling || 'Not set' },
   ];
 
-  const [showQuickFacts, setShowQuickFacts] = useState(true);
-  const [showCurrentSpecs, setShowCurrentSpecs] = useState(true);
+  // Panels default collapsed per request
+  const [showQuickFacts, setShowQuickFacts] = useState(false);
+  const [showCurrentSpecs, setShowCurrentSpecs] = useState(false);
 
   return (
     <div className="parts-shell">
       <header className="parts-hero">
         <div>
-          <p className="parts-kicker">ATLAS COMPONENT LAB</p>
-          <h1>Find parts, compare options, and start a build.</h1>
+          <h1>ATLAS COMPONENT LAB</h1>
         </div>
 
         <div className="parts-hero-actions">
@@ -97,8 +113,21 @@ export default function PartsDatabase() {
           <label className="parts-search-wrap">
             <span>Category</span>
             <select className="parts-search" value={category} onChange={(e) => setCategory(e.target.value)}>
-              {CATEGORY_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
+              {availableCategories.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="parts-search-wrap">
+            <span>Brand</span>
+            <select className="parts-search" value={brand} onChange={(e) => setBrand(e.target.value)}>
+              {availableBrands.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
               ))}
             </select>
           </label>
@@ -120,16 +149,10 @@ export default function PartsDatabase() {
             />
           </label>
 
-          <div className="parts-chip-row">
-            {availableCategories.map((cat) => (
-              <button key={cat} type="button" className={category === cat ? 'parts-chip active' : 'parts-chip'} onClick={() => setCategory(cat)}>
-                {cat}
-              </button>
-            ))}
-          </div>
         </section>
 
         <aside className="parts-side-panel">
+          <div className="parts-quickfacts-toplabel">Your PC info</div>
           <div className="parts-panel-card parts-summary-card">
             <div className="parts-quickfacts-header" onClick={() => setShowQuickFacts((s) => !s)} role="button" tabIndex={0}>
               <h3>Quick facts</h3>
@@ -199,32 +222,31 @@ export default function PartsDatabase() {
           ) : (
             <>
               <div className="parts-grid-header">
-                <h2>Catalog</h2>
+                <h2>Components</h2>
                 <span>{filteredParts.length} results</span>
               </div>
 
               <div className="parts-grid">
                 {filteredParts.map((part) => (
                   <article key={part.component_id} className="db-card">
+                    {part.is_active ? <span className="db-status-dot" aria-label="Active component" title="Active component" /> : null}
                     <div className="db-card-header">
                       <span className="db-cat">{part.category}</span>
                       <span className="db-brand">{part.brand}</span>
                     </div>
+                    {part.image_url ? (
+                      <div className="db-card-image-wrap">
+                        <img className="db-card-image" src={part.image_url} alt={part.name} loading="lazy" />
+                      </div>
+                    ) : null}
                     <div className="db-card-body">
                       <h3>{part.name}</h3>
-                      <p className="db-subline">
-                        {part.form_factor ? `Form factor: ${part.form_factor}` : 'Form factor not set'}
-                      </p>
-                      <div className="db-specs">
-                        <div className="spec-item"><span className="spec-label">Release year:</span><span className="spec-val">{part.release_year || 'N/A'}</span></div>
-                        <div className="spec-item"><span className="spec-label">Active:</span><span className="spec-val">{part.is_active ? 'Yes' : 'No'}</span></div>
-                      </div>
+                      <p className="db-price-line">Price: <strong>{formatPrice(part.price ?? part.latest_price)}</strong></p>
                     </div>
                     <div className="db-card-footer">
-                      <span className="db-price">#{part.component_id}</span>
                       <div className="db-card-actions">
-                        <button className="db-btn db-btn-secondary" onClick={() => requireAuth('/builder')}>Add to Builder</button>
-                        <button className="db-btn">View Details</button>
+                        <button className="db-btn db-btn-secondary" onClick={() => requireAuth('/builder')}>Add</button>
+                        <button className="db-btn">View</button>
                       </div>
                     </div>
                   </article>

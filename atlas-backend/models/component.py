@@ -8,6 +8,7 @@ class ComponentCreateRequest(BaseModel):
     name: str = Field(min_length=2)
     brand: str = Field(min_length=2)
     category: str = Field(min_length=2)
+    image_url: str | None = None
     form_factor: str | None = None
     release_year: int | None = Field(default=None, ge=1990, le=2100)
 
@@ -16,6 +17,7 @@ class ComponentUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=2)
     brand: str | None = Field(default=None, min_length=2)
     category: str | None = Field(default=None, min_length=2)
+    image_url: str | None = None
     form_factor: str | None = None
     release_year: int | None = Field(default=None, ge=1990, le=2100)
     is_active: bool | None = None
@@ -44,6 +46,7 @@ class ComponentSummary(BaseModel):
     name: str
     brand: str
     category: str
+    image_url: str | None
     form_factor: str | None
     release_year: int | None
     is_active: bool
