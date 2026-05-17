@@ -19,9 +19,18 @@ Your role:
 - Use Philippine Peso (PHP / ₱) when discussing budgets and prices.
 - When the user is discussing THEIR saved build (provided in context), give advice about those exact parts, upgrades, bottlenecks, and compatibility.
 
+CHAT FORMAT (required — replies appear in a narrow chat bubble):
+- Lead with a direct answer in one short sentence (yes / no / maybe + expected FPS or outcome).
+- Keep the whole visible reply under ~100 words before any ===LOOKUP_PART=== or ===RECOMMEND=== block.
+- Use at most 3 bullet lines (start each with "- ") for key bottlenecks or upgrade picks.
+- One optional "Verdict:" line after bullets — single sentence only.
+- Never use markdown tables, headers (#), bold (**), or numbered essays.
+- Do not repeat part names, prices, or specs that will appear in product cards below.
+- Do not say "see the cards below" or "clickable retailer links" — the UI adds cards automatically.
+
 IMPORTANT — You must trigger structured lookups so the app can show clickable retailer links:
 
-1) **Specific part(s)** (one GPU, CPU, RAM stick, etc.) — when you name concrete products to buy:
+1) Specific part(s) (one GPU, CPU, RAM stick, etc.) — when you name concrete products to buy:
 End your reply with:
 ===LOOKUP_PART===
 {"budget_php": <number or null>, "parts": [{"category": "GPU", "name": "NVIDIA GeForce GTX 1650 Super"}, ...]}
@@ -31,20 +40,52 @@ Use LOOKUP_PART when the user asks what to buy for a category, asks for options 
 Include every product name you suggest in the parts array (full product names).
 budget_php is the user's max spend for that part (e.g. 15000 for a GPU budget); use null if not specified.
 
-2) **Full PC build** (multiple categories: CPU, GPU, RAM, etc.):
+2) Full PC build (multiple categories: CPU, GPU, RAM, etc.):
 ===RECOMMEND===
 {"budget_php": <number>, "workload": "<gaming|video_editing|student|general|streaming|productivity>", "device_type": "<desktop|laptop|mobile>"}
 ===END===
 
 Use RECOMMEND only for complete builds, not single-component questions.
 
-3) **General knowledge** (what is VRAM, how does PCIe work): no block.
-
-Keep replies concise. Do not use markdown bold (**); plain text is fine."""
+3) General knowledge (what is VRAM, how does PCIe work): no block."""
 
 
 class ChatServiceError(Exception):
     pass
+
+
+def _clean_chat_reply(text: str) -> str:
+    """Normalize model output for narrow chat bubbles."""
+    if not text:
+        return text
+
+    cleaned = text
+    cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"__([^_]+)__", r"\1", cleaned)
+    cleaned = re.sub(r"^#{1,6}\s+", "", cleaned, flags=re.MULTILINE)
+
+    # Drop markdown table rows; keep prose lines.
+    lines: list[str] = []
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            lines.append("")
+            continue
+        if stripped.startswith("|") and stripped.endswith("|"):
+            continue
+        if re.fullmatch(r"[-|: ]+", stripped):
+            continue
+        lines.append(line.rstrip())
+
+    cleaned = "\n".join(lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = re.sub(
+        r"(?i)\n*see the cards below[^\n]*",
+        "",
+        cleaned,
+    ).strip()
+
+    return cleaned
 
 
 def _openrouter_headers() -> dict[str, str]:
@@ -76,7 +117,7 @@ def _call_openrouter(messages: list[dict[str, str]], system_extra: str = "") -> 
     payload_base: dict[str, Any] = {
         "messages": [{"role": "system", "content": system}, *messages],
         "temperature": 0.4,
-        "max_tokens": 1400,
+        "max_tokens": 700,
     }
 
     last_error: Exception | None = None
@@ -327,13 +368,9 @@ def process_chat(
                 parts = []
 
     if parts and not reply_text:
-        reply_text = (
-            "Here are parts with Philippine retailer links — click a card to open the listing."
-        )
-    elif parts:
-        reply_text += (
-            "\n\nSee the cards below for clickable retailer links and current prices."
-        )
+        reply_text = "Here are matching parts with retailer links."
+
+    reply_text = _clean_chat_reply(reply_text or "")
 
     return {
         "message": reply_text or raw_reply,

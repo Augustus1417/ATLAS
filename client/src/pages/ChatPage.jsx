@@ -10,6 +10,7 @@ import {
 } from '../utils/format';
 import PageLayout from '../components/PageLayout';
 import { Button, Card, Badge, SectionHeading, Input, Select } from '../components/UI';
+import { parseChatBlocks } from '../utils/chatMessage';
 
 const WELCOME_MESSAGE = {
   role: 'assistant',
@@ -144,6 +145,49 @@ function SaveBuildPanel({ message, onError }) {
   );
 }
 
+function ChatMessageBody({ content, isUser }) {
+  if (isUser) {
+    return <p className="text-sm leading-relaxed whitespace-pre-wrap">{content}</p>;
+  }
+
+  const blocks = parseChatBlocks(content);
+  if (blocks.length === 0) {
+    return <p className="text-sm leading-relaxed text-white/90">{content}</p>;
+  }
+
+  return (
+    <div className="space-y-2.5 text-sm leading-relaxed text-white/90">
+      {blocks.map((block, index) => {
+        if (block.type === 'list') {
+          return (
+            <ul key={index} className="space-y-1.5 pl-4 list-disc marker:text-violet-400/80">
+              {block.items.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        const verdictMatch = block.text.match(/^(Verdict|Result|Bottom line):\s*(.+)$/i);
+        if (verdictMatch) {
+          return (
+            <p key={index} className="text-white font-medium border-l-2 border-violet-500/60 pl-3">
+              <span className="text-violet-300/90">{verdictMatch[1]}:</span>{' '}
+              {verdictMatch[2]}
+            </p>
+          );
+        }
+
+        return (
+          <p key={index} className={index === 0 ? 'text-white font-medium' : undefined}>
+            {block.text}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function ChatBubble({ message, onSaveError }) {
   const isUser = message.role === 'user';
 
@@ -151,13 +195,13 @@ function ChatBubble({ message, onSaveError }) {
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className="max-w-[min(100%,42rem)] space-y-3">
         <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+          className={`rounded-2xl px-4 py-3 ${
             isUser
               ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white'
               : 'bg-white/8 border border-white/10 text-white/90'
           }`}
         >
-          {message.content}
+          <ChatMessageBody content={message.content} isUser={isUser} />
         </div>
 
         {message.parts?.length > 0 && (
