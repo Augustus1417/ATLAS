@@ -93,6 +93,54 @@ def _openrouter_headers() -> dict[str, str]:
     return openrouter_headers()
 
 
+def _extract_openrouter_content(body: dict[str, Any]) -> str | None:
+    """Normalize OpenRouter chat completion content (string, parts array, or empty)."""
+    choices = body.get("choices") or []
+    if not choices:
+        return None
+
+    message = choices[0].get("message") or {}
+    content = message.get("content")
+
+    if isinstance(content, str):
+        text = content.strip()
+        return text or None
+
+    if isinstance(content, list):
+        chunks: list[str] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") in ("text", "output_text") and part.get("text"):
+                chunks.append(str(part["text"]))
+        joined = "".join(chunks).strip()
+        return joined or None
+
+    refusal = message.get("refusal")
+    if refusal:
+        return str(refusal).strip() or None
+
+    return None
+
+
+_SAVE_BUILD_INTENT = re.compile(
+    r"(?:\bsave\s+(?:as|this|my|the)\s+build\b|\bsave\s+(?:this|my|the)\s+build\b|\bsaving\s+(?:this|my|the)\s+build\b)",
+    re.IGNORECASE,
+)
+
+
+def _is_save_build_intent(user_message: str) -> bool:
+    return bool(_SAVE_BUILD_INTENT.search(user_message.strip()))
+
+
+def _save_build_intent_reply() -> str:
+    return (
+        "To save, use the Save this build panel below your parts list: "
+        "enter a build name, pick a workload, then click Save as build. "
+        "You must be signed in."
+    )
+
+
 def _parse_block(content: str, tag: str) -> tuple[str, dict[str, Any] | None]:
     pattern = rf"==={tag}===\s*(\{{.*?\}})\s*===END==="
     match = re.search(pattern, content, re.DOTALL)
@@ -136,11 +184,16 @@ def _call_openrouter(messages: list[dict[str, str]], system_extra: str = "") -> 
                             + (f": {detail}" if detail else "")
                         )
                     body = response.json()
-                return body["choices"][0]["message"]["content"].strip()
+                content = _extract_openrouter_content(body)
+                if content:
+                    return content
+                last_error = ChatServiceError(
+                    f"OpenRouter returned empty content for model {model}"
+                )
             except ChatServiceError as exc:
                 last_error = exc
                 break
-            except (httpx.HTTPError, KeyError, IndexError) as exc:
+            except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
                 last_error = exc
                 if attempt == 1:
                     break
@@ -199,7 +252,10 @@ def _extract_lookup_fallback(user_message: str, assistant_reply: str) -> dict[st
             )
             if response.status_code >= 400:
                 return None
-            text = response.json()["choices"][0]["message"]["content"].strip()
+            body = response.json()
+            text = _extract_openrouter_content(body)
+            if not text:
+                return None
             if text.startswith("```"):
                 text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
                 text = re.sub(r"\s*```$", "", text)
@@ -302,6 +358,16 @@ def process_chat(
         active_build = {"build_id": build_id}
 
     api_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+    last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+
+    if _is_save_build_intent(last_user):
+        return {
+            "message": _save_build_intent_reply(),
+            "parts": [],
+            "recommendation": None,
+            "is_full_build": False,
+            "active_build": active_build,
+        }
 
     try:
         raw_reply = _call_openrouter(api_messages, system_extra=system_extra)

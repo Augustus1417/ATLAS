@@ -323,6 +323,11 @@ export function ChatPage() {
     (b) => String(b.build_id) === String(selectedBuildId)
   );
 
+  const isSaveBuildIntent = (text) =>
+    /\bsave\s+(?:as|this|my|the)\s+build\b|\bsave\s+(?:this|my|the)\s+build\b|\bsaving\s+(?:this|my|the)\s+build\b/i.test(
+      text.trim()
+    );
+
   const handleSend = async (e) => {
     e?.preventDefault();
     const text = input.trim();
@@ -334,6 +339,27 @@ export function ChatPage() {
     setInput('');
     setError('');
     setLoading(true);
+
+    if (isSaveBuildIntent(text)) {
+      const lastWithParts = [...nextMessages]
+        .reverse()
+        .find((m) => m.role === 'assistant' && m.parts?.length);
+      const saveHint =
+        'Use the Save this build panel below your parts list: enter a name, choose workload, then click Save as build. You must be signed in.';
+      setMessages([
+        ...nextMessages,
+        {
+          role: 'assistant',
+          content: saveHint,
+          parts: lastWithParts?.parts || [],
+          recommendation: lastWithParts?.recommendation || null,
+          is_full_build: Boolean(lastWithParts?.is_full_build),
+        },
+      ]);
+      setLoading(false);
+      inputRef.current?.focus();
+      return;
+    }
 
     try {
       const apiMessages = nextMessages
