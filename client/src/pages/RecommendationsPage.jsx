@@ -1,23 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { recommendationsAPI, buildsAPI } from '../utils/api';
-import {
-  formatPrice,
-  getPartPrice,
-  getComponentLink,
-  getComponentStore,
-  openComponentLink,
-} from '../utils/format';
+import { formatPrice, getPartPrice } from '../utils/format';
 import PageLayout from '../components/PageLayout';
+import { RecommendedPartCard } from '../components/RecommendedPartCard';
 import {
   Button,
   Card,
   Input,
   Select,
-  Badge,
-  Eyebrow,
   SectionHeading,
 } from '../components/UI';
+
+const partSelection = (component) => ({
+  category: component.category,
+  name: component.name,
+});
 
 export function RecommendationsPage() {
   const navigate = useNavigate();
@@ -29,6 +27,13 @@ export function RecommendationsPage() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const [buildName, setBuildName] = useState('');
+  const [regeneratingAll, setRegeneratingAll] = useState(false);
+  const [regeneratingCategory, setRegeneratingCategory] = useState(null);
+
+  const applyRecommendationPayload = (payload) => {
+    const components = payload.components || payload.parts || [];
+    setRecommendation({ ...payload, components });
+  };
 
   const handleGenerateRecommendation = async () => {
     setErrors({});
@@ -47,9 +52,7 @@ export function RecommendationsPage() {
         device_type: deviceType,
       });
 
-      const payload = data.data || {};
-      const components = payload.components || payload.parts || [];
-      setRecommendation({ ...payload, components });
+      applyRecommendationPayload(data.data || {});
       setBuildName(`${workload.toUpperCase()} Build - ₱${parseInt(budget).toLocaleString()}`);
     } catch (error) {
       setErrors({
@@ -59,6 +62,68 @@ export function RecommendationsPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRegenerateAll = async () => {
+    if (!recommendation?.components?.length) return;
+
+    setRegeneratingAll(true);
+    setErrors({});
+
+    try {
+      const { data } = await recommendationsAPI.generate({
+        budget_php: parseInt(budget, 10),
+        workload,
+        device_type: deviceType,
+        regenerate: true,
+        avoid_parts: recommendation.components.map(partSelection),
+      });
+      applyRecommendationPayload(data.data || {});
+    } catch (error) {
+      setErrors({
+        submit:
+          error.response?.data?.message ||
+          error.response?.data?.detail ||
+          'Failed to regenerate build',
+      });
+    } finally {
+      setRegeneratingAll(false);
+    }
+  };
+
+  const handleRegeneratePart = async (category) => {
+    if (!recommendation?.components?.length) return;
+
+    setRegeneratingCategory(category);
+    setErrors({});
+
+    const locked = recommendation.components
+      .filter((c) => c.category !== category)
+      .map(partSelection);
+    const avoid = recommendation.components
+      .filter((c) => c.category === category)
+      .map(partSelection);
+
+    try {
+      const { data } = await recommendationsAPI.generate({
+        budget_php: parseInt(budget, 10),
+        workload,
+        device_type: deviceType,
+        regenerate_category: category,
+        locked_parts: locked,
+        avoid_parts: avoid,
+      });
+      applyRecommendationPayload(data.data || {});
+    } catch (error) {
+      setErrors({
+        submit:
+          error.response?.data?.message ||
+          error.response?.data?.detail ||
+          'Failed to regenerate this part',
+      });
+    } finally {
+      setRegeneratingCategory(null);
     }
   };
 
@@ -177,6 +242,22 @@ export function RecommendationsPage() {
         <div className="space-y-8 pb-20">
           {/* Summary */}
           <Card>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+              <p className="text-white/60 text-sm max-w-md">
+                Not happy with this build? Regenerate the full list or swap individual parts.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={regeneratingAll}
+                disabled={Boolean(regeneratingCategory)}
+                onClick={handleRegenerateAll}
+                className="shrink-0"
+              >
+                Regenerate build
+              </Button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <p className="text-white/60 text-sm uppercase tracking-wide font-bold">
@@ -202,13 +283,39 @@ export function RecommendationsPage() {
               </div>
               <div>
                 <p className="text-white/60 text-sm uppercase tracking-wide font-bold">
-                  Components Selected
+                  Budget Used
                 </p>
                 <p className="text-3xl font-bold text-blue-300 mt-3">
-                  {recommendation.components.length}
+                  {(() => {
+                    const budgetNum = parseInt(budget, 10) || 1;
+                    const total =
+                      recommendation.estimated_total_php ??
+                      recommendation.components.reduce(
+                        (sum, c) => sum + (getPartPrice(c) || 0),
+                        0
+                      );
+                    return `${Math.round((total / budgetNum) * 100)}%`;
+                  })()}
                 </p>
               </div>
             </div>
+            {(() => {
+              const budgetNum = parseInt(budget, 10) || 1;
+              const total =
+                recommendation.estimated_total_php ??
+                recommendation.components.reduce(
+                  (sum, c) => sum + (getPartPrice(c) || 0),
+                  0
+                );
+              if (total / budgetNum >= 0.85) return null;
+              return (
+                <p className="text-amber-200/90 text-sm mt-4 border-t border-white/10 pt-4">
+                  This build uses less than 85% of your budget. Use{' '}
+                  <span className="text-white font-medium">Regenerate build</span> for a
+                  higher-tier alternative.
+                </p>
+              );
+            })()}
           </Card>
 
           {/* Recommendation Reason */}
@@ -229,62 +336,15 @@ export function RecommendationsPage() {
               Recommended Components
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {recommendation.components.map((component, index) => {
-                const hasLink = Boolean(getComponentLink(component));
-                const store = getComponentStore(component);
-                return (
-                <Card
+              {recommendation.components.map((component, index) => (
+                <RecommendedPartCard
                   key={component.component_id ?? `${component.name}-${index}`}
-                  className={`transition-all duration-300 group ${
-                    hasLink
-                      ? 'cursor-pointer hover:border-violet-400/40 hover:bg-white/[0.07]'
-                      : ''
-                  }`}
-                  onClick={() => {
-                    if (hasLink) openComponentLink(component);
-                  }}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <Badge variant="default" size="sm">
-                          {component.category}
-                        </Badge>
-                        <h4 className="text-lg font-bold text-white mt-2 group-hover:text-purple-300 transition-colors">
-                          {component.name}
-                        </h4>
-                      </div>
-                    </div>
-
-                    <p className="text-white/60 text-sm">{component.brand}</p>
-
-                    <div className="pt-4 border-t border-white/10 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-white/60 text-sm font-medium">Price:</span>
-                        <span className="text-white font-semibold">
-                          {formatPrice(component)}
-                        </span>
-                      </div>
-                      {hasLink ? (
-                        <p className="text-violet-300 text-sm font-medium">
-                          Click to view on {store || 'retailer'} →
-                        </p>
-                      ) : (
-                        <p className="text-white/40 text-xs">No listing link available</p>
-                      )}
-                    </div>
-
-                    {component.reason && (
-                      <div className="p-3 rounded-lg bg-blue-500/15 border border-blue-500/30">
-                        <p className="text-blue-200 text-sm leading-relaxed">
-                          💡 {component.reason}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              );
-              })}
+                  component={component}
+                  index={index}
+                  onRegenerate={handleRegeneratePart}
+                  regenerating={regeneratingCategory === component.category}
+                />
+              ))}
             </div>
           </div>
 

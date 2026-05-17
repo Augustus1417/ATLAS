@@ -3,15 +3,19 @@ from pydantic import BaseModel, Field
 from models.component import DeviceType, WorkloadType
 
 
+class PartSelection(BaseModel):
+    category: str
+    name: str
+
+
 class RecommendationRequest(BaseModel):
     budget_php: int = Field(gt=0)
     workload: WorkloadType = Field(min_length=1)
     device_type: DeviceType
-
-
-class PartSelection(BaseModel):
-    category: str
-    name: str
+    regenerate: bool = False
+    regenerate_category: str | None = None
+    avoid_parts: list[PartSelection] = Field(default_factory=list)
+    locked_parts: list[PartSelection] = Field(default_factory=list)
 
 
 class Listing(BaseModel):

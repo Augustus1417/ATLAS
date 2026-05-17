@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { chatAPI, buildsAPI } from '../utils/api';
+import { chatAPI, buildsAPI, recommendationsAPI } from '../utils/api';
 import {
   formatPrice,
   getPartPrice,
@@ -19,16 +19,33 @@ const WELCOME_MESSAGE = {
   parts: [],
 };
 
-function PartCard({ part }) {
+function PartCard({ part, onRegenerate, regenerating = false }) {
   const hasLink = Boolean(getComponentLink(part));
   const store = getComponentStore(part);
 
   return (
     <Card className="!p-4 transition-all border border-white/10">
       <div className="space-y-2">
-        <Badge variant="default" size="sm">
-          {part.category}
-        </Badge>
+        <div className="flex items-start justify-between gap-2">
+          <Badge variant="default" size="sm">
+            {part.category}
+          </Badge>
+          {onRegenerate && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              loading={regenerating}
+              className="!min-h-0 py-1 px-2 text-[11px] shrink-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRegenerate(part.category);
+              }}
+            >
+              Regenerate
+            </Button>
+          )}
+        </div>
         <h4 className="text-sm font-bold text-white leading-snug">{part.name}</h4>
         {part.brand && <p className="text-white/50 text-xs">{part.brand}</p>}
         <div className="flex justify-between items-center pt-2 border-t border-white/10">
@@ -188,8 +205,18 @@ function ChatMessageBody({ content, isUser }) {
   );
 }
 
-function ChatBubble({ message, onSaveError }) {
+function ChatBubble({
+  message,
+  messageIndex,
+  onSaveError,
+  onRegenerateBuild,
+  onRegeneratePart,
+  regeneratingKey,
+}) {
   const isUser = message.role === 'user';
+  const canRegenerateBuild =
+    message.is_full_build && message.recommendation?.budget_php && message.parts?.length;
+  const buildRegenerating = regeneratingKey === `${messageIndex}-all`;
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -206,14 +233,35 @@ function ChatBubble({ message, onSaveError }) {
 
         {message.parts?.length > 0 && (
           <div className="w-full space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-white/45 px-1">
-              {message.is_full_build ? 'Recommended build' : 'Parts with links'}
-            </p>
+            <div className="flex items-center justify-between gap-2 px-1">
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/45">
+                {message.is_full_build ? 'Recommended build' : 'Parts with links'}
+              </p>
+              {canRegenerateBuild && onRegenerateBuild && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  loading={buildRegenerating}
+                  disabled={Boolean(regeneratingKey) && !buildRegenerating}
+                  className="!min-h-0 py-1 px-2 text-[11px]"
+                  onClick={() => onRegenerateBuild(messageIndex)}
+                >
+                  Regenerate build
+                </Button>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {message.parts.map((part, index) => (
                 <PartCard
                   key={part.component_id ?? `${part.name}-${index}`}
                   part={part}
+                  onRegenerate={
+                    canRegenerateBuild && onRegeneratePart
+                      ? (category) => onRegeneratePart(messageIndex, category)
+                      : undefined
+                  }
+                  regenerating={regeneratingKey === `${messageIndex}-${part.category}`}
                 />
               ))}
             </div>
@@ -247,6 +295,7 @@ export function ChatPage() {
   const [selectedBuildId, setSelectedBuildId] = useState(
     () => searchParams.get('build') || ''
   );
+  const [regeneratingKey, setRegeneratingKey] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -326,7 +375,91 @@ export function ChatPage() {
   const handleClear = () => {
     setMessages([WELCOME_MESSAGE]);
     setError('');
+    setRegeneratingKey(null);
     inputRef.current?.focus();
+  };
+
+  const updateMessageRecommendation = (messageIndex, payload) => {
+    const components = payload.components || payload.parts || [];
+    setMessages((prev) =>
+      prev.map((m, i) =>
+        i === messageIndex
+          ? {
+              ...m,
+              parts: components,
+              recommendation: { ...payload, components },
+              is_full_build: true,
+            }
+          : m
+      )
+    );
+  };
+
+  const handleRegenerateChatBuild = async (messageIndex) => {
+    const msg = messages[messageIndex];
+    const rec = msg?.recommendation;
+    if (!rec?.budget_php || !msg?.parts?.length) return;
+
+    setRegeneratingKey(`${messageIndex}-all`);
+    setError('');
+
+    try {
+      const { data } = await recommendationsAPI.generate({
+        budget_php: rec.budget_php,
+        workload: rec.workload || 'gaming',
+        device_type: rec.device_type || 'desktop',
+        regenerate: true,
+        avoid_parts: msg.parts.map((p) => ({
+          category: p.category,
+          name: p.name,
+        })),
+      });
+      updateMessageRecommendation(messageIndex, data.data || {});
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          err.response?.data?.detail ||
+          'Failed to regenerate build'
+      );
+    } finally {
+      setRegeneratingKey(null);
+    }
+  };
+
+  const handleRegenerateChatPart = async (messageIndex, category) => {
+    const msg = messages[messageIndex];
+    const rec = msg?.recommendation;
+    if (!rec?.budget_php || !msg?.parts?.length) return;
+
+    setRegeneratingKey(`${messageIndex}-${category}`);
+    setError('');
+
+    const locked = msg.parts
+      .filter((p) => p.category !== category)
+      .map((p) => ({ category: p.category, name: p.name }));
+    const avoid = msg.parts
+      .filter((p) => p.category === category)
+      .map((p) => ({ category: p.category, name: p.name }));
+
+    try {
+      const { data } = await recommendationsAPI.generate({
+        budget_php: rec.budget_php,
+        workload: rec.workload || 'gaming',
+        device_type: rec.device_type || 'desktop',
+        regenerate_category: category,
+        locked_parts: locked,
+        avoid_parts: avoid,
+      });
+      updateMessageRecommendation(messageIndex, data.data || {});
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          err.response?.data?.detail ||
+          'Failed to regenerate this part'
+      );
+    } finally {
+      setRegeneratingKey(null);
+    }
   };
 
   const buildOptions = [
@@ -378,7 +511,11 @@ export function ChatPage() {
             <ChatBubble
               key={`${msg.role}-${index}`}
               message={msg}
+              messageIndex={index}
               onSaveError={setError}
+              onRegenerateBuild={handleRegenerateChatBuild}
+              onRegeneratePart={handleRegenerateChatPart}
+              regeneratingKey={regeneratingKey}
             />
           ))}
 

@@ -30,11 +30,18 @@ async def create_recommendation(
         raise HTTPException(status_code=400, detail=str(e)) from e
     
     try:
+        avoid_parts = [{"category": p.category, "name": p.name} for p in payload.avoid_parts]
+        locked_parts = [{"category": p.category, "name": p.name} for p in payload.locked_parts]
+
         data = generate_recommendation(
             conn=conn,
             budget_php=payload.budget_php,
             workload=payload.workload,
             device_type=payload.device_type,
+            regenerate=payload.regenerate,
+            regenerate_category=payload.regenerate_category,
+            avoid_parts=avoid_parts,
+            locked_parts=locked_parts,
         )
     except RecommendationServiceError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
