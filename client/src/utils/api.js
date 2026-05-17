@@ -2,11 +2,27 @@ import axios from 'axios';
 
 const DEV_API_FALLBACK = 'http://localhost:8000';
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ||
-  (import.meta.env.DEV ? DEV_API_FALLBACK : '');
+function resolveApiBaseUrl() {
+  const fromEnv = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (fromEnv) {
+    return fromEnv.replace(/\/$/, '');
+  }
+  if (import.meta.env.DEV) {
+    return DEV_API_FALLBACK;
+  }
+  return '';
+}
 
+const API_BASE_URL = resolveApiBaseUrl();
 const isApiConfigured = Boolean(API_BASE_URL);
+
+if (import.meta.env.DEV) {
+  console.info(
+    '[ATLAS] VITE_API_BASE_URL =',
+    import.meta.env.VITE_API_BASE_URL ?? '(not set — using localhost fallback)'
+  );
+  console.info('[ATLAS] Requests go to:', API_BASE_URL);
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,

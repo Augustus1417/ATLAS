@@ -52,7 +52,8 @@ Or use the included `Procfile` on Render/Railway (they set `PORT` automatically)
 
 1. Open `https://your-api.example.com/health` — should return `"database": "connected"`.
 2. Note the API URL for the frontend: `VITE_API_BASE_URL=https://your-api.example.com`
-3. Deploy the client with that variable (no `/api` suffix unless you use a path prefix).
+3. Deploy the client with that variable (see `client/DEPLOYMENT.md`).
+4. Add the **deployed frontend origin** to `CORS_ORIGINS` and redeploy this service.
 
 ## Common issues
 
