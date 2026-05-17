@@ -26,8 +26,10 @@ def _normalize_workload_key(workload: str) -> str:
     normalized = workload.strip().lower()
     if not normalized:
         return "general"
-    if any(token in normalized for token in {"edit", "video", "content", "production"}):
+    if any(token in normalized for token in {"edit", "video", "content", "production", "creation"}):
         return "video_editing"
+    if any(token in normalized for token in {"productivity", "workstation", "office", "work"}):
+        return "general"
     if any(token in normalized for token in {"stream", "streaming", "broadcast"}):
         return "streaming"
     if any(token in normalized for token in {"game", "gaming", "esport"}):
@@ -95,15 +97,46 @@ def budget_allocation_shares(workload: str, device_type: str) -> dict[str, float
     return shares_by_workload.get(key, shares_by_workload["general"])
 
 
+def budget_tier(budget_php: int) -> str:
+    if budget_php <= 20_000:
+        return "ultra_budget"
+    if budget_php <= 45_000:
+        return "entry"
+    if budget_php <= 80_000:
+        return "mid"
+    if budget_php <= 120_000:
+        return "high"
+    return "enthusiast"
+
+
+def _tier_guidance(budget_php: int) -> str:
+    tier = budget_tier(budget_php)
+    guidance = {
+        "ultra_budget": "Budget-tier / used-market parts only.",
+        "entry": "Entry gaming — GTX 1660 / RX 6600 class, Ryzen 5 / Core i3–i5.",
+        "mid": "Mid-range — RTX 4060 / 4060 Ti, Ryzen 5 5600/7500F, 16GB RAM.",
+        "high": "High-end — RTX 4070 Super / 4070 Ti, Ryzen 7, 32GB RAM, quality PSU.",
+        "enthusiast": (
+            "Enthusiast / flagship — RTX 4070 Ti Super, RTX 4080, or RX 7900 XT; "
+            "Ryzen 7 7800X3D or Core i7/i9; 32GB DDR5; premium motherboard; "
+            "2TB Gen4 NVMe; 850W+ Gold PSU. Do NOT suggest a ₱40,000-class build."
+        ),
+    }
+    return guidance.get(tier, guidance["mid"])
+
+
 def _format_allocation_hint(budget_php: int, workload: str, device_type: str) -> str:
     shares = budget_allocation_shares(workload, device_type)
+    tier_line = f"Build tier: {_tier_guidance(budget_php)}"
     if not shares:
         target_low = int(budget_php * 0.88)
         return (
+            f"{tier_line}\n"
             f"Target total retail price: ₱{target_low:,}–₱{budget_php:,} (use most of the budget)."
         )
 
     lines = [
+        tier_line,
         f"Target total retail price: ₱{int(budget_php * 0.88):,}–₱{budget_php:,}.",
         "Aim for these typical Philippine price bands per part:",
     ]
@@ -349,8 +382,8 @@ def fetch_budget_upgrade_recommendations(
                 ),
             },
         ],
-        "temperature": 0.2,
-        "max_tokens": 600,
+        "temperature": 0.35,
+        "max_tokens": 800,
     }
 
     last_error: Exception | None = None
@@ -403,6 +436,26 @@ def fallback_recommendations(
         {"category": "Case", "name": "Tecware Forge M2 Airflow Case"},
     ]
 
+    high_gaming = [
+        {"category": "CPU", "name": "AMD Ryzen 7 7800X3D 8-Core Processor"},
+        {"category": "GPU", "name": "ASUS TUF Gaming GeForce RTX 4070 Super 12GB"},
+        {"category": "RAM", "name": "G.Skill Trident Z5 32GB DDR5 6000MHz"},
+        {"category": "Motherboard", "name": "MSI MAG B650 TOMAHAWK WIFI"},
+        {"category": "Storage", "name": "Samsung 990 Pro 2TB NVMe SSD"},
+        {"category": "PSU", "name": "Corsair RM850e 850W 80+ Gold"},
+        {"category": "Case", "name": "Lian Li Lancool 216"},
+    ]
+
+    enthusiast_gaming = [
+        {"category": "CPU", "name": "AMD Ryzen 7 7800X3D 8-Core Processor"},
+        {"category": "GPU", "name": "Gigabyte GeForce RTX 4080 SUPER Gaming OC 16GB"},
+        {"category": "RAM", "name": "G.Skill Trident Z5 32GB DDR5 6400MHz"},
+        {"category": "Motherboard", "name": "ASUS ROG STRIX B650E-F Gaming WIFI"},
+        {"category": "Storage", "name": "Samsung 990 Pro 2TB NVMe SSD"},
+        {"category": "PSU", "name": "Seasonic Vertex GX-850 850W 80+ Gold"},
+        {"category": "Case", "name": "Lian Li O11 Dynamic EVO"},
+    ]
+
     ultra_budget = [
         {"category": "CPU", "name": "AMD Ryzen 5 5600G 6-Core Processor"},
         {"category": "RAM", "name": "Team Elite 8GB DDR4 3200MHz"},
@@ -416,8 +469,12 @@ def fallback_recommendations(
         gaming_preset = ultra_budget
     elif budget_php > 0 and budget_php <= 45000:
         gaming_preset = entry_gaming
-    else:
+    elif budget_php > 0 and budget_php <= 80000:
         gaming_preset = mid_gaming
+    elif budget_php > 0 and budget_php <= 120000:
+        gaming_preset = high_gaming
+    else:
+        gaming_preset = enthusiast_gaming
 
     presets: dict[str, list[dict[str, str]]] = {
         "gaming": gaming_preset,

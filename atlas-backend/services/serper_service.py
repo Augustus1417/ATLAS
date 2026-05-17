@@ -146,7 +146,12 @@ def _encode_cached_source(store: str | None, link: str | None) -> str:
     return json.dumps({"s": payload["s"]}, separators=(",", ":"))
 
 
-def get_recent_cached_prices(conn, component_id: int) -> list[dict[str, Any]]:
+def get_recent_cached_prices(
+    conn,
+    component_id: int,
+    *,
+    limit: int = 15,
+) -> list[dict[str, Any]]:
     threshold = datetime.now(timezone.utc) - timedelta(hours=24)
 
     cur = dict_cursor(conn)
@@ -155,10 +160,10 @@ def get_recent_cached_prices(conn, component_id: int) -> list[dict[str, Any]]:
         SELECT price, source, recorded_at
         FROM pricing_history
         WHERE component_id = %s AND recorded_at >= %s
-        ORDER BY price ASC, recorded_at DESC
-        LIMIT 3
+        ORDER BY recorded_at DESC, price DESC
+        LIMIT %s
         """,
-        (component_id, threshold),
+        (component_id, threshold, limit),
     )
     rows = cur.fetchall()
     cur.close()

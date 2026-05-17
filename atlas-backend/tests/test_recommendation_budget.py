@@ -1,6 +1,6 @@
 import unittest
 
-from services.ai_service import budget_allocation_shares, _format_allocation_hint
+from services.ai_service import budget_allocation_shares, budget_tier, _format_allocation_hint
 from services.recommendation_service import (
     BUDGET_UTILIZATION_MIN,
     _category_budget_caps,
@@ -43,6 +43,12 @@ class TestRecommendationBudget(unittest.TestCase):
 
     def test_utilization_threshold(self):
         self.assertEqual(BUDGET_UTILIZATION_MIN, 0.85)
+
+    def test_enthusiast_tier_for_150k(self):
+        self.assertEqual(budget_tier(150_000), "enthusiast")
+        hint = _format_allocation_hint(150_000, "gaming", "desktop")
+        self.assertIn("4080", hint)
+        self.assertIn("132,000", hint)
 
     def test_total_for_parts(self):
         total = _total_for_parts(

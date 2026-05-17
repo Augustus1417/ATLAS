@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 import re
 from typing import Any
 
-from database import dict_cursor
+from database import dict_cursor, is_sqlite_connection
 from services.ai_service import (
     AIServiceError,
     budget_allocation_shares,
@@ -11,7 +11,7 @@ from services.ai_service import (
     fetch_ai_recommendations,
     fetch_budget_upgrade_recommendations,
 )
-from utils.component_pricing import normalize_category
+from utils.component_pricing import normalize_category, parse_pricing_source
 from services.serper_service import (
     SerperServiceError,
     fetch_live_prices,
@@ -33,7 +33,9 @@ ESSENTIAL_ORDER = {
 
 LOW_BUDGET_THRESHOLD = 15000
 BUDGET_UTILIZATION_MIN = 0.85
+UNDERPRICE_RATIO = 0.65
 UPGRADE_PRIORITY = ["GPU", "CPU", "RAM", "Storage", "Motherboard", "PSU", "Case", "Device"]
+FILL_MAX_ROUNDS = 5
 
 
 def _derive_brand(name: str) -> str:
@@ -116,8 +118,8 @@ def _lookup_recent_cached_prices(conn, part: dict[str, str]) -> list[dict[str, A
         WHERE LOWER(c.category) = LOWER(%s)
                     AND ph.recorded_at >= %s
           AND ({conditions})
-        ORDER BY ph.price ASC, ph.recorded_at DESC
-        LIMIT 3
+        ORDER BY ph.recorded_at DESC, ph.price DESC
+        LIMIT 15
         """,
                 tuple([part["category"], threshold, *patterns]),
     )
@@ -144,15 +146,102 @@ def _pick_listing(
     listings: list[dict[str, Any]],
     max_price: float | None = None,
     target_price: float | None = None,
+    min_price: float | None = None,
 ) -> dict[str, Any] | None:
     priced = [item for item in listings if item.get("price") is not None]
     if max_price is not None:
         priced = [item for item in priced if float(item["price"]) <= max_price]
+    if min_price is not None:
+        priced = [item for item in priced if float(item["price"]) >= min_price]
+    if not priced and min_price is not None:
+        priced = [item for item in listings if item.get("price") is not None]
+        if max_price is not None:
+            priced = [item for item in priced if float(item["price"]) <= max_price]
     if not priced:
         return None
     if target_price is None:
         return min(priced, key=lambda item: float(item["price"]))
     return min(priced, key=lambda item: abs(float(item["price"]) - target_price))
+
+
+def _output_part_from_resolved(resolved: dict[str, Any]) -> dict[str, Any]:
+    price = resolved.get("cheapest_price") or resolved.get("price")
+    return {
+        "component_id": resolved["component_id"],
+        "category": resolved["category"],
+        "name": resolved["name"],
+        "brand": resolved.get("brand") or _derive_brand(resolved["name"]),
+        "price": price,
+        "cheapest_price": price,
+        "link": resolved.get("link"),
+        "store": resolved.get("store"),
+        "listings": resolved.get("listings") or [],
+    }
+
+
+def _find_db_component_in_price_band(
+    conn,
+    category: str,
+    min_price: float,
+    max_price: float,
+    target_price: float,
+    exclude_names: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Pick a catalog component with recent pricing in the requested band."""
+    if max_price <= 0:
+        return None
+
+    threshold = datetime.now(timezone.utc) - timedelta(days=7)
+    exclude = {n.strip().lower() for n in (exclude_names or []) if n}
+
+    if is_sqlite_connection(conn):
+        active_clause = "(c.is_active = 1 OR c.is_active IS NULL)"
+    else:
+        active_clause = "(c.is_active IS TRUE OR c.is_active IS NULL)"
+
+    cur = dict_cursor(conn)
+    cur.execute(
+        f"""
+        SELECT c.component_id, c.name, c.brand, c.category, ph.price, ph.source
+        FROM components c
+        JOIN pricing_history ph ON ph.component_id = c.component_id
+        WHERE LOWER(c.category) = LOWER(%s)
+          AND {active_clause}
+          AND ph.price >= %s
+          AND ph.price <= %s
+          AND ph.recorded_at >= %s
+        ORDER BY ABS(ph.price - %s) ASC, ph.recorded_at DESC
+        LIMIT 12
+        """,
+        (category, min_price, max_price, threshold, target_price),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    for row in rows:
+        if row["name"].strip().lower() in exclude:
+            continue
+        parsed = parse_pricing_source(row.get("source"))
+        price = float(row["price"])
+        return {
+            "component_id": int(row["component_id"]),
+            "category": normalize_category(row["category"]),
+            "name": row["name"],
+            "brand": row.get("brand") or _derive_brand(row["name"]),
+            "cheapest_price": price,
+            "price": price,
+            "link": parsed.get("link"),
+            "store": parsed.get("store"),
+            "listings": [
+                {
+                    "store": parsed.get("store") or "Unknown",
+                    "price": price,
+                    "link": parsed.get("link"),
+                    "status": None,
+                }
+            ],
+        }
+    return None
 
 
 def _part_priority(part: dict[str, Any], budget_php: int, device_type: str) -> tuple[int, int]:
@@ -183,20 +272,38 @@ def _resolve_part_with_pricing(
         cached = get_recent_cached_prices(conn, component_id)
 
     if cached:
-        listings = cached
+        listings = list(cached)
     else:
-        try:
-            if component_id is None:
-                component_id = _ensure_component(conn, part)
-            listings = fetch_live_prices(part["name"])
-            save_pricing_history(conn, component_id, listings)
-        except SerperServiceError:
-            listings = []
+        listings = []
+
+    try:
+        if component_id is None:
+            component_id = _ensure_component(conn, part)
+        live = fetch_live_prices(part["name"])
+        if live:
+            save_pricing_history(conn, component_id, live)
+            listings = [*listings, *live]
+    except SerperServiceError:
+        pass
+
+    if component_id is None:
+        component_id = _ensure_component(conn, part)
+    if not listings:
+        listings = get_recent_cached_prices(conn, component_id, limit=15)
 
     if not listings:
         listings = [{"store": "Price unavailable", "price": None, "link": None, "status": "Price unavailable"}]
 
-    chosen = _pick_listing(listings, max_price=max_price, target_price=target_price)
+    min_price = None
+    if target_price is not None and target_price >= 5000:
+        min_price = target_price * 0.35
+
+    chosen = _pick_listing(
+        listings,
+        max_price=max_price,
+        target_price=target_price,
+        min_price=min_price,
+    )
     if chosen is None and max_price is not None:
         chosen = _pick_listing(listings, max_price=None, target_price=target_price)
     if chosen is None:
@@ -294,6 +401,53 @@ def _candidate_from_ai_part(
             "store": resolved.get("store"),
         },
     }
+
+
+def _fill_missing_categories(
+    conn,
+    output_parts: list[dict[str, Any]],
+    budget_php: int,
+    workload: str,
+    device_type: str,
+    category_caps: dict[str, float],
+) -> list[dict[str, Any]]:
+    if device_type != "desktop":
+        return output_parts
+
+    present = {p["category"] for p in output_parts}
+    needed = [
+        normalize_category(cat)
+        for cat in ESSENTIAL_ORDER["desktop"]
+        if cat not in present and cat != "Device"
+    ]
+    if not needed:
+        return output_parts
+
+    fallback = fallback_recommendations(workload, device_type, budget_php)
+    candidates: list[dict[str, Any]] = []
+    for part in output_parts:
+        candidates.append(
+            {
+                "component_id": part["component_id"],
+                "category": part["category"],
+                "name": part["name"],
+                "brand": part.get("brand") or _derive_brand(part["name"]),
+                "listings": part.get("listings") or [],
+                "cheapest_price": part.get("price"),
+                "cheapest_listing": {
+                    "price": part.get("price"),
+                    "link": part.get("link"),
+                    "store": part.get("store"),
+                },
+            }
+        )
+    for spec in fallback:
+        cat = normalize_category(spec["category"])
+        if cat not in needed:
+            continue
+        candidates.append(_candidate_from_ai_part(conn, spec, category_caps))
+
+    return _assemble_within_budget(candidates, budget_php, device_type)
 
 
 def _assemble_within_budget(
@@ -412,7 +566,20 @@ def _apply_part_upgrades(
     return ordered
 
 
-def _optimize_budget_utilization(
+def _replace_category_part(
+    output_parts: list[dict[str, Any]],
+    new_part: dict[str, Any],
+    budget_php: int,
+) -> list[dict[str, Any]]:
+    category = new_part["category"]
+    others = [p for p in output_parts if p["category"] != category]
+    trial_total = _total_for_parts(others) + float(new_part.get("price") or 0)
+    if trial_total > budget_php:
+        return output_parts
+    return _merge_parts_by_category([*others, new_part])
+
+
+def _upgrade_underpriced_categories(
     conn,
     output_parts: list[dict[str, Any]],
     budget_php: int,
@@ -420,73 +587,125 @@ def _optimize_budget_utilization(
     device_type: str,
     category_caps: dict[str, float],
 ) -> list[dict[str, Any]]:
-    total = _total_for_parts(output_parts)
-    if total >= budget_php * BUDGET_UTILIZATION_MIN:
-        return output_parts
+    by_category = {p["category"]: p for p in output_parts}
 
-    current_specs = [{"category": p["category"], "name": p["name"]} for p in output_parts]
-    try:
-        upgrades = fetch_budget_upgrade_recommendations(
-            budget_php=budget_php,
-            workload=workload,
-            device_type=device_type,
-            current_parts=current_specs,
-            current_total=total,
-        )
-        output_parts = _apply_part_upgrades(
-            conn, output_parts, upgrades, budget_php, category_caps
-        )
-    except AIServiceError:
-        pass
+    for category in UPGRADE_PRIORITY:
+        cap = category_caps.get(category)
+        if not cap:
+            continue
 
-    total = _total_for_parts(output_parts)
-    if total >= budget_php * BUDGET_UTILIZATION_MIN:
-        return output_parts
+        current = by_category.get(category)
+        current_price = float(current["price"]) if current and current.get("price") else 0.0
+        if current_price >= cap * UNDERPRICE_RATIO:
+            continue
 
-    # Last resort: re-resolve existing parts aiming at the top of each category cap.
-    boosted: list[dict[str, Any]] = []
-    for part in sorted(
-        output_parts,
-        key=lambda p: UPGRADE_PRIORITY.index(p["category"])
-        if p["category"] in UPGRADE_PRIORITY
-        else len(UPGRADE_PRIORITY),
-    ):
-        category = part["category"]
-        current_price = float(part.get("price") or 0)
-        others_total = _total_for_parts(boosted)
-        cap = float(category_caps.get(category, budget_php - others_total))
+        others_total = _total_for_parts([p for c, p in by_category.items() if c != category])
         remaining = budget_php - others_total
-        max_price = min(cap, remaining)
-        target = min(max_price * 0.95, remaining) if max_price > current_price else None
+        if remaining <= 0:
+            break
+
+        target = min(float(cap), remaining)
+        min_price = max(target * 0.45, 1000.0)
+        exclude = [current["name"]] if current else []
+
+        db_match = _find_db_component_in_price_band(
+            conn,
+            category,
+            min_price=min_price,
+            max_price=target,
+            target_price=target * 0.9,
+            exclude_names=exclude,
+        )
+        if db_match and float(db_match["price"]) > current_price:
+            output_parts = _replace_category_part(
+                output_parts, _output_part_from_resolved(db_match), budget_php
+            )
+            by_category = {p["category"]: p for p in output_parts}
+            continue
+
+        locked = [
+            {"category": p["category"], "name": p["name"]}
+            for c, p in by_category.items()
+            if c != category
+        ]
+        avoid = [{"category": category, "name": current["name"]}] if current else []
+
+        try:
+            ai_parts = fetch_ai_category_recommendation(
+                budget_php=budget_php,
+                workload=workload,
+                device_type=device_type,
+                category=category,
+                category_budget_php=int(target),
+                locked_parts=locked,
+                avoid_parts=avoid,
+            )
+        except AIServiceError:
+            continue
+
+        if not ai_parts:
+            continue
 
         resolved = _resolve_part_with_pricing(
             conn,
-            {"category": category, "name": part["name"]},
-            max_price=max_price,
-            target_price=target,
+            {"category": category, "name": ai_parts[0]["name"]},
+            max_price=target,
+            target_price=target * 0.9,
         )
-        if resolved and resolved["cheapest_price"] is not None:
-            new_price = float(resolved["cheapest_price"])
-            if new_price >= current_price and others_total + new_price <= budget_php:
-                boosted.append(
-                    {
-                        "component_id": resolved["component_id"],
-                        "category": category,
-                        "name": resolved["name"],
-                        "brand": resolved["brand"],
-                        "price": new_price,
-                        "cheapest_price": new_price,
-                        "link": resolved.get("link"),
-                        "store": resolved.get("store"),
-                        "listings": resolved["listings"],
-                    }
-                )
-                continue
+        if not resolved or resolved.get("cheapest_price") is None:
+            continue
 
-        if others_total + current_price <= budget_php:
-            boosted.append(part)
+        new_price = float(resolved["cheapest_price"])
+        if new_price <= current_price:
+            continue
 
-    return boosted
+        output_parts = _replace_category_part(
+            output_parts, _output_part_from_resolved(resolved), budget_php
+        )
+        by_category = {p["category"]: p for p in output_parts}
+
+    return output_parts
+
+
+def _fill_build_to_budget(
+    conn,
+    output_parts: list[dict[str, Any]],
+    budget_php: int,
+    workload: str,
+    device_type: str,
+    category_caps: dict[str, float],
+) -> list[dict[str, Any]]:
+    target_total = budget_php * BUDGET_UTILIZATION_MIN
+
+    for _ in range(FILL_MAX_ROUNDS):
+        total = _total_for_parts(output_parts)
+        if total >= target_total:
+            break
+
+        current_specs = [{"category": p["category"], "name": p["name"]} for p in output_parts]
+        try:
+            upgrades = fetch_budget_upgrade_recommendations(
+                budget_php=budget_php,
+                workload=workload,
+                device_type=device_type,
+                current_parts=current_specs,
+                current_total=total,
+            )
+            output_parts = _apply_part_upgrades(
+                conn, output_parts, upgrades, budget_php, category_caps
+            )
+        except AIServiceError:
+            pass
+
+        total = _total_for_parts(output_parts)
+        if total >= target_total:
+            break
+
+        output_parts = _upgrade_underpriced_categories(
+            conn, output_parts, budget_php, workload, device_type, category_caps
+        )
+
+    return output_parts
 
 
 def _parts_to_specs(parts: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -667,7 +886,10 @@ def generate_recommendation(
 
     candidate_parts = [_candidate_from_ai_part(conn, part, category_caps) for part in ai_parts]
     output_parts = _assemble_within_budget(candidate_parts, budget_php, device_type)
-    output_parts = _optimize_budget_utilization(
+    output_parts = _fill_missing_categories(
+        conn, output_parts, budget_php, workload, device_type, category_caps
+    )
+    output_parts = _fill_build_to_budget(
         conn, output_parts, budget_php, workload, device_type, category_caps
     )
 
