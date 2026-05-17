@@ -159,12 +159,6 @@ const FEATURES = [
       'Drag-and-drop interface to build your perfect PC with real-time price tracking.',
   },
   {
-    icon: '⚡',
-    title: 'Compatibility Check',
-    description:
-      'Instantly verify component compatibility before you buy anything.',
-  },
-  {
     icon: '💾',
     title: 'Component Library',
     description:
@@ -175,12 +169,6 @@ const FEATURES = [
     title: 'Price Tracking',
     description:
       'Monitor prices across multiple retailers and get alerts on deals.',
-  },
-  {
-    icon: '🌐',
-    title: 'Community Builds',
-    description:
-      'Share your builds and get inspired by what other builders are creating.',
   },
 ];
 

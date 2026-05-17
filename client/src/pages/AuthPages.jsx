@@ -217,7 +217,7 @@ export function RegisterPage() {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="Join ATLAS to build, compare, and save PC configurations"
+      subtitle="Join ATLAS to build, chat with our bot, and save PC configurations"
     >
       <AuthAlert message={errors.submit} />
 
